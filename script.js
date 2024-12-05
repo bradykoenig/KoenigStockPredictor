@@ -7,13 +7,15 @@ const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 const DAILY_STORAGE_KEY = "topDailyStocks";
 
 // Enhanced criteria for "Top Stocks Today"
-function passesStrictCriteria(stock, avgVolume, currentVolume) {
+function passesStricterCriteria(stock, avgVolume, currentVolume, avg5, avg20) {
   return (
-    stock.change > 15 && // Daily change > 15%
+    stock.change > 20 && // Daily change > 20%
     stock.trend === "Upward" && // Positive trend
     stock.peRatio !== null &&
-    stock.peRatio < 25 && // P/E Ratio < 25
-    currentVolume > avgVolume * 1.5 // Volume surge > 50%
+    stock.peRatio < 20 && // P/E Ratio < 20
+    currentVolume > avgVolume * 2 && // Volume surge > 100%
+    stock.price > avg5 && // Price above 5-day moving average
+    stock.price > avg20 // Price above 20-day moving average
   );
 }
 
@@ -38,9 +40,11 @@ async function fetchStockDetails(symbol) {
   if (!quoteData || !profileData)
     throw new Error(`Failed to fetch details for ${symbol}.`);
 
-  // Volume and averages (you may implement more granular metrics if API allows)
-  const avgVolume = Math.random() * 10000 + 20000; // Placeholder for actual average volume
-  const currentVolume = Math.random() * 50000; // Placeholder for actual current volume
+  // Simulated volume and averages (replace with actual API when available)
+  const avgVolume = Math.random() * 10000 + 20000; // Placeholder for average volume
+  const currentVolume = Math.random() * 50000; // Placeholder for current volume
+  const avg5 = quoteData.c * 0.95; // Simulate 5-day moving average
+  const avg20 = quoteData.c * 0.90; // Simulate 20-day moving average
 
   return {
     symbol,
@@ -50,15 +54,27 @@ async function fetchStockDetails(symbol) {
     trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
     avgVolume,
     currentVolume,
+    avg5,
+    avg20,
   };
 }
 
-// Add stocks to leaderboards only if they pass strict criteria
+// Add stocks to leaderboards only if they pass stricter criteria
 function addToLeaderboards(stock, dailyStocks, weeklyStocks) {
   if (
-    passesStrictCriteria(stock, stock.avgVolume, stock.currentVolume)
+    passesStricterCriteria(
+      stock,
+      stock.avgVolume,
+      stock.currentVolume,
+      stock.avg5,
+      stock.avg20
+    )
   ) {
-    dailyStocks.push(stock);
+    // Add to "Top Stocks Today"
+    if (dailyStocks.length < 5) {
+      dailyStocks.push(stock);
+    }
+    // Add to "Top Stocks Weekly" if not already present
     if (!weeklyStocks.find((s) => s.symbol === stock.symbol)) {
       weeklyStocks.push(stock);
     }
@@ -132,7 +148,9 @@ async function updateStockTable() {
           <td>${stockDetails.peRatio || "N/A"}</td>
           <td>${stockDetails.trend}</td>
           <td>${
-            stockDetails.trend === "Upward" ? "Positive momentum" : "No clear reason"
+            stockDetails.trend === "Upward"
+              ? "Positive momentum"
+              : "No clear reason"
           }</td>
         `;
         tbody.appendChild(row);
