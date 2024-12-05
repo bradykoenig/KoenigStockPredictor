@@ -1,61 +1,61 @@
-const FINNHUB_API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g"; // Replace with your Finnhub API key
+const FINNHUB_API_KEY = "YOUR_FINNHUB_API_KEY"; // Replace with your Finnhub API key
 const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
 const API_URL_PROFILE = `https://finnhub.io/api/v1/stock/profile2`;
-const YAHOO_FINANCE_API_URL = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=`;
+const API_URL_FINANCIALS = `https://finnhub.io/api/v1/stock/metric`;
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 const DAILY_STORAGE_KEY = "topDailyStocks";
 
-// Fetch P/E ratio from Yahoo Finance
-async function fetchPERatioYahoo(symbol) {
+// Fetch EPS from Finnhub's financials API
+async function fetchEPS(symbol) {
   try {
-    const response = await fetch(`${YAHOO_FINANCE_API_URL}${symbol}`);
+    const response = await fetch(
+      `${API_URL_FINANCIALS}?symbol=${symbol}&metric=all&token=${FINNHUB_API_KEY}`
+    );
     const data = await response.json();
 
-    console.log(`Yahoo Finance Data for ${symbol}:`, data);
+    console.log(`Financial Data for ${symbol}:`, data);
 
     if (
       !data ||
-      !data.quoteResponse ||
-      !data.quoteResponse.result ||
-      data.quoteResponse.result.length === 0
+      !data.metric ||
+      !data.metric["epsBasicTTM"]
     ) {
-      console.warn(`P/E ratio not found for ${symbol}`);
+      console.warn(`EPS not found for ${symbol}`);
       return null;
     }
 
-    return data.quoteResponse.result[0].trailingPE || null; // Return trailing P/E ratio if available
+    return data.metric["epsBasicTTM"]; // Return EPS (trailing twelve months)
   } catch (error) {
-    console.error(`Error fetching P/E ratio for ${symbol}:`, error);
+    console.error(`Error fetching EPS for ${symbol}:`, error);
     return null;
   }
 }
 
-// Fetch detailed stock data
+// Fetch detailed stock data and calculate P/E ratio
 async function fetchStockDetails(symbol) {
   try {
-    const [quoteResponse, profileResponse] = await Promise.all([
+    const [quoteResponse, profileResponse, eps] = await Promise.all([
       fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${FINNHUB_API_KEY}`),
       fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${FINNHUB_API_KEY}`),
+      fetchEPS(symbol),
     ]);
 
     const quoteData = await quoteResponse.json();
     const profileData = await profileResponse.json();
 
-    console.log(`Finnhub Data for ${symbol}:`, { quoteData, profileData });
+    console.log(`Finnhub Data for ${symbol}:`, { quoteData, profileData, eps });
 
     if (!quoteData || !profileData) throw new Error(`Missing data for ${symbol}`);
 
-    let peRatio = profileData.pe;
-    if (!peRatio) {
-      peRatio = await fetchPERatioYahoo(symbol);
-    }
+    const price = quoteData.c;
+    const peRatio = eps ? (price / eps).toFixed(2) : "N/A"; // Calculate P/E ratio
 
     return {
       symbol,
-      price: quoteData.c,
+      price,
       change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-      peRatio: peRatio || "N/A", // Use fetched P/E ratio or default to N/A
+      peRatio, // Dynamically calculated P/E ratio
       trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
     };
   } catch (error) {
