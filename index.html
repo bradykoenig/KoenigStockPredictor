@@ -1,34 +1,48 @@
-<div class="main-content">
-    <div class="side-tabs">
-      <div class="top-stocks-today">
-        <h2>Top Stocks Today</h2>
-        <ul id="dailyStocks">
-          <!-- Daily stocks will be dynamically added here -->
-        </ul>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Best Stocks Predictor</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>Best Stocks Predictor</h1>
+    <div class="main-content">
+      <div class="stock-table">
+        <table id="stockTable">
+          <thead>
+            <tr>
+              <th>Stock</th>
+              <th>Price</th>
+              <th>Change (%)</th>
+              <th>PE Ratio</th>
+              <th>Trend</th>
+              <th>Why It's Performing Well</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Rows will be dynamically generated -->
+          </tbody>
+        </table>
       </div>
-      <div class="top-stocks-weekly">
-        <h2>Top Stocks Weekly</h2>
-        <ul id="weeklyStocks">
-          <!-- Weekly stocks will be dynamically added here -->
-        </ul>
+      <div class="side-tabs">
+        <div class="top-stocks-today">
+          <h2>Top Stocks Today</h2>
+          <ul id="dailyStocks">
+            <!-- Daily stocks will be dynamically added here -->
+          </ul>
+        </div>
+        <div class="top-stocks-weekly">
+          <h2>Top Stocks Weekly</h2>
+          <ul id="weeklyStocks">
+            <!-- Weekly stocks will be dynamically added here -->
+          </ul>
+        </div>
       </div>
-    </div>
-    <div class="stock-table">
-      <table id="stockTable">
-        <thead>
-          <tr>
-            <th>Stock</th>
-            <th>Price</th>
-            <th>Change (%)</th>
-            <th>PE Ratio</th>
-            <th>Trend</th>
-            <th>Why It's Performing Well</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Rows will be dynamically generated -->
-        </tbody>
-      </table>
     </div>
   </div>
-  
+</body>
+</html>
