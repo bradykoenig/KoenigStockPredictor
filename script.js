@@ -27,37 +27,35 @@ async function fetchTopStocks() {
   return data.slice(0, 20).map((stock) => stock.symbol); // Limit to 20 stocks per refresh
 }
 
-// Fetch detailed stock data
 async function fetchStockDetails(symbol) {
-  const [quoteResponse, profileResponse] = await Promise.all([
-    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
-    fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${API_KEY}`),
-  ]);
-
-  const quoteData = await quoteResponse.json();
-  const profileData = await profileResponse.json();
-
-  if (!quoteData || !profileData)
-    throw new Error(`Failed to fetch details for ${symbol}.`);
-
-  // Simulated volume and averages (replace with actual API when available)
-  const avgVolume = Math.random() * 10000 + 20000; // Placeholder for average volume
-  const currentVolume = Math.random() * 50000; // Placeholder for current volume
-  const avg5 = quoteData.c * 0.95; // Simulate 5-day moving average
-  const avg20 = quoteData.c * 0.90; // Simulate 20-day moving average
-
-  return {
-    symbol,
-    price: quoteData.c,
-    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-    peRatio: profileData.pe,
-    trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
-    avgVolume,
-    currentVolume,
-    avg5,
-    avg20,
-  };
-}
+    const [quoteResponse, profileResponse] = await Promise.all([
+      fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
+      fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${API_KEY}`),
+    ]);
+  
+    const quoteData = await quoteResponse.json();
+    const profileData = await profileResponse.json();
+  
+    if (!quoteData || !profileData)
+      throw new Error(`Failed to fetch details for ${symbol}.`);
+  
+    // Calculate P/E Ratio if not provided
+    let peRatio = profileData.pe;
+    if (!peRatio && profileData.eps && profileData.eps > 0) {
+      peRatio = quoteData.c / profileData.eps; // Price / EPS
+    }
+  
+    return {
+      symbol,
+      price: quoteData.c,
+      change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+      peRatio: peRatio || "N/A", // Default to N/A if still unavailable
+      beta: profileData.beta || "N/A", // Ensure beta is non-null
+      dividendYield: profileData.dividendYield || 0, // Ensure dividend yield is non-null
+      trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
+    };
+  }
+  
 
 // Add stocks to leaderboards only if they pass stricter criteria
 function addToLeaderboards(stock, dailyStocks, weeklyStocks) {
