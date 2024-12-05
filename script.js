@@ -7,15 +7,13 @@ const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 const DAILY_STORAGE_KEY = "topDailyStocks";
 
 // Enhanced criteria for "Top Stocks Today"
-function passesStricterCriteria(stock, avgVolume, currentVolume, avg5, avg20) {
+function passesStrictCriteria(stock, avgVolume, currentVolume) {
   return (
-    stock.change > 20 && // Daily change > 20%
+    stock.change > 15 && // Daily change > 15%
     stock.trend === "Upward" && // Positive trend
     stock.peRatio !== null &&
-    stock.peRatio < 20 && // P/E Ratio < 20
-    currentVolume > avgVolume * 2 && // Volume surge > 100%
-    stock.price > avg5 && // Price above 5-day moving average
-    stock.price > avg20 // Price above 20-day moving average
+    stock.peRatio < 25 && // P/E Ratio < 25
+    currentVolume > avgVolume * 1.5 // Volume surge > 50%
   );
 }
 
@@ -27,52 +25,40 @@ async function fetchTopStocks() {
   return data.slice(0, 20).map((stock) => stock.symbol); // Limit to 20 stocks per refresh
 }
 
+// Fetch detailed stock data
 async function fetchStockDetails(symbol) {
-    const [quoteResponse, profileResponse] = await Promise.all([
-      fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
-      fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${API_KEY}`),
-    ]);
-  
-    const quoteData = await quoteResponse.json();
-    const profileData = await profileResponse.json();
-  
-    if (!quoteData || !profileData)
-      throw new Error(`Failed to fetch details for ${symbol}.`);
-  
-    // Calculate P/E Ratio if not provided
-    let peRatio = profileData.pe;
-    if (!peRatio && profileData.eps && profileData.eps > 0) {
-      peRatio = quoteData.c / profileData.eps; // Price / EPS
-    }
-  
-    return {
-      symbol,
-      price: quoteData.c,
-      change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-      peRatio: peRatio || "N/A", // Default to N/A if still unavailable
-      beta: profileData.beta || "N/A", // Ensure beta is non-null
-      dividendYield: profileData.dividendYield || 0, // Ensure dividend yield is non-null
-      trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
-    };
-  }
-  
+  const [quoteResponse, profileResponse] = await Promise.all([
+    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
+    fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${API_KEY}`),
+  ]);
 
-// Add stocks to leaderboards only if they pass stricter criteria
+  const quoteData = await quoteResponse.json();
+  const profileData = await profileResponse.json();
+
+  if (!quoteData || !profileData)
+    throw new Error(`Failed to fetch details for ${symbol}.`);
+
+  // Volume and averages (you may implement more granular metrics if API allows)
+  const avgVolume = Math.random() * 10000 + 20000; // Placeholder for actual average volume
+  const currentVolume = Math.random() * 50000; // Placeholder for actual current volume
+
+  return {
+    symbol,
+    price: quoteData.c,
+    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+    peRatio: profileData.pe,
+    trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
+    avgVolume,
+    currentVolume,
+  };
+}
+
+// Add stocks to leaderboards only if they pass strict criteria
 function addToLeaderboards(stock, dailyStocks, weeklyStocks) {
   if (
-    passesStricterCriteria(
-      stock,
-      stock.avgVolume,
-      stock.currentVolume,
-      stock.avg5,
-      stock.avg20
-    )
+    passesStrictCriteria(stock, stock.avgVolume, stock.currentVolume)
   ) {
-    // Add to "Top Stocks Today"
-    if (dailyStocks.length < 5) {
-      dailyStocks.push(stock);
-    }
-    // Add to "Top Stocks Weekly" if not already present
+    dailyStocks.push(stock);
     if (!weeklyStocks.find((s) => s.symbol === stock.symbol)) {
       weeklyStocks.push(stock);
     }
@@ -146,9 +132,7 @@ async function updateStockTable() {
           <td>${stockDetails.peRatio || "N/A"}</td>
           <td>${stockDetails.trend}</td>
           <td>${
-            stockDetails.trend === "Upward"
-              ? "Positive momentum"
-              : "No clear reason"
+            stockDetails.trend === "Upward" ? "Positive momentum" : "No clear reason"
           }</td>
         `;
         tbody.appendChild(row);
