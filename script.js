@@ -1,63 +1,58 @@
-const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
-const API_URL_TOP_STOCKS = `https://finnhub.io/api/v1/stock/symbol`;
+const FINNHUB_API_KEY = "YOUR_FINNHUB_API_KEY"; // Replace with your Finnhub API key
 const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
 const API_URL_PROFILE = `https://finnhub.io/api/v1/stock/profile2`;
+const YAHOO_FINANCE_API_URL = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=`;
 
-const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
-const DAILY_STORAGE_KEY = "topDailyStocks";
-
-// Enhanced criteria for "Top Stocks Today"
-function passesStricterCriteria(stock, avgVolume, currentVolume, avg5, avg20) {
-  return (
-    stock.change > 20 && // Daily change > 20%
-    stock.trend === "Upward" && // Positive trend
-    stock.peRatio !== null &&
-    stock.peRatio < 20 && // P/E Ratio < 20
-    currentVolume > avgVolume * 2 && // Volume surge > 100%
-    stock.price > avg5 && // Price above 5-day moving average
-    stock.price > avg20 // Price above 20-day moving average
-  );
-}
-
-// Fetch all US stocks and filter the top-performing ones
-async function fetchTopStocks() {
-  const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
+// Fetch P/E ratio from Yahoo Finance
+async function fetchPERatioYahoo(symbol) {
+  const response = await fetch(`${YAHOO_FINANCE_API_URL}${symbol}`);
   const data = await response.json();
-  if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
-  return data.slice(0, 20).map((stock) => stock.symbol); // Limit to 20 stocks per refresh
+
+  if (
+    !data ||
+    !data.quoteResponse ||
+    !data.quoteResponse.result ||
+    data.quoteResponse.result.length === 0
+  ) {
+    console.warn(`P/E ratio not found for ${symbol}`);
+    return null;
+  }
+
+  const stockInfo = data.quoteResponse.result[0];
+  return stockInfo.trailingPE || null; // Return trailing P/E ratio if available
 }
 
+// Fetch detailed stock data
 async function fetchStockDetails(symbol) {
-    const [quoteResponse, profileResponse] = await Promise.all([
-      fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
-      fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${API_KEY}`),
-    ]);
-  
-    const quoteData = await quoteResponse.json();
-    const profileData = await profileResponse.json();
-  
-    if (!quoteData || !profileData)
-      throw new Error(`Failed to fetch details for ${symbol}.`);
-  
-    // Calculate P/E Ratio if not provided
-    let peRatio = profileData.pe;
-    if (!peRatio && profileData.eps && profileData.eps > 0) {
-      peRatio = quoteData.c / profileData.eps; // Price / EPS
-    }
-  
-    return {
-      symbol,
-      price: quoteData.c,
-      change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-      peRatio: peRatio || "N/A", // Default to N/A if still unavailable
-      beta: profileData.beta || "N/A", // Ensure beta is non-null
-      dividendYield: profileData.dividendYield || 0, // Ensure dividend yield is non-null
-      trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
-    };
-  }
-  
+  const [quoteResponse, profileResponse] = await Promise.all([
+    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${FINNHUB_API_KEY}`),
+    fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${FINNHUB_API_KEY}`),
+  ]);
 
-// Add stocks to leaderboards only if they pass stricter criteria
+  const quoteData = await quoteResponse.json();
+  const profileData = await profileResponse.json();
+
+  if (!quoteData || !profileData)
+    throw new Error(`Failed to fetch details for ${symbol}.`);
+
+  // Fetch P/E ratio using Yahoo Finance if Finnhub doesn't provide it
+  let peRatio = profileData.pe;
+  if (!peRatio) {
+    peRatio = await fetchPERatioYahoo(symbol);
+  }
+
+  return {
+    symbol,
+    price: quoteData.c,
+    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+    peRatio: peRatio || "N/A", // Use fetched P/E ratio or default to N/A
+    beta: profileData.beta || "N/A", // Fetch beta for risk assessment
+    dividendYield: profileData.dividendYield || 0, // Ensure dividend yield is non-null
+    trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
+  };
+}
+
+// Add stocks to leaderboards only if they pass strict criteria
 function addToLeaderboards(stock, dailyStocks, weeklyStocks) {
   if (
     passesStricterCriteria(
