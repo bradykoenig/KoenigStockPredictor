@@ -31,9 +31,12 @@ async function fetchStockDetails(symbol) {
   if (!quoteData || !profileData || !metricData)
     throw new Error(`Failed to fetch details for ${symbol}.`);
 
-  // Calculate P/E ratio
-  const eps = metricData.metric ? metricData.metric.epsBasicTTM : null; // EPS from metrics
-  const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A"; // Calculate P/E ratio
+  // Use P/E ratio directly from `profile2`, or calculate it using `metric`
+  const peRatio =
+    profileData.pe ||
+    (metricData.metric && metricData.metric.epsBasicTTM
+      ? (quoteData.c / metricData.metric.epsBasicTTM).toFixed(2)
+      : "N/A");
 
   return {
     symbol,
