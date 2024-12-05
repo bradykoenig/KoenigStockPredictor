@@ -1,19 +1,18 @@
-const API_KEY_FMP = "luw7HWPbHQT2w67qBRRdpQv57EiHKedK"; // Replace with your FMP API key
-const API_URL_PROFILE = `https://financialmodelingprep.com/api/v3/profile`; // For fundamental data
-const API_URL_QUOTE = `https://financialmodelingprep.com/api/v3/quote`; // For real-time stock data
-const API_URL_SYMBOLS = `https://financialmodelingprep.com/api/v3/stock/list`; // For available stocks
+const API_KEY_POLYGON = "f8Nd_Rd1hFTyB1BlWRJPmEnPj_or8R4f"; // Replace with your Polygon.io API key
+const API_URL_TICKERS = `https://api.polygon.io/v3/reference/tickers`; // For stock symbols
+const API_URL_QUOTE = `https://api.polygon.io/v2/last/nbbo`; // For real-time quotes
+const API_URL_FUNDAMENTALS = `https://api.polygon.io/vX/reference/financials`; // For EPS and P/E Ratio
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 
 // Fetch top-performing stocks (limit to 20)
 async function fetchTopStocks() {
   try {
-    const response = await fetch(`${API_URL_SYMBOLS}?apikey=${API_KEY_FMP}`);
+    const response = await fetch(`${API_URL_TICKERS}?market=stocks&active=true&sort=ticker&limit=20&apiKey=${API_KEY_POLYGON}`);
     const data = await response.json();
-    if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
+    if (!data || !data.results || !Array.isArray(data.results)) throw new Error("Failed to fetch stock symbols.");
 
-    // Limit to 20 stocks per refresh
-    return data.slice(0, 20).map((stock) => stock.symbol);
+    return data.results.map((stock) => stock.ticker); // Return first 20 tickers
   } catch (error) {
     console.error("Error fetching top stocks:", error);
     return [];
@@ -23,30 +22,30 @@ async function fetchTopStocks() {
 // Fetch detailed stock data, including EPS and P/E ratio
 async function fetchStockDetails(symbol) {
   try {
-    const [quoteResponse, profileResponse] = await Promise.all([
-      fetch(`${API_URL_QUOTE}/${symbol}?apikey=${API_KEY_FMP}`),
-      fetch(`${API_URL_PROFILE}/${symbol}?apikey=${API_KEY_FMP}`),
+    const [quoteResponse, fundamentalsResponse] = await Promise.all([
+      fetch(`${API_URL_QUOTE}/${symbol}?apiKey=${API_KEY_POLYGON}`),
+      fetch(`${API_URL_FUNDAMENTALS}/${symbol}?apiKey=${API_KEY_POLYGON}`),
     ]);
 
     const quoteData = await quoteResponse.json();
-    const profileData = await profileResponse.json();
+    const fundamentalsData = await fundamentalsResponse.json();
 
-    if (!quoteData[0] || !profileData[0]) {
+    if (!quoteData || !quoteData.last || !fundamentalsData || !fundamentalsData.results[0]) {
       console.error(`Data missing for ${symbol}`);
       return null;
     }
 
-    const quote = quoteData[0];
-    const profile = profileData[0];
+    const quote = quoteData.last;
+    const fundamentals = fundamentalsData.results[0];
 
     return {
-      symbol: profile.symbol,
-      price: quote.price,
-      change: quote.changesPercentage,
-      eps: profile.eps || "N/A", // EPS from FMP
-      peRatio: profile.pe || "N/A", // P/E Ratio from FMP
-      trend: quote.changesPercentage > 0 ? "Upward" : "Downward",
-      reason: getPerformanceReason(quote, profile),
+      symbol: symbol,
+      price: quote.bidprice || 0,
+      change: quote.askprice - quote.bidprice || 0,
+      eps: fundamentals.eps || "N/A", // EPS from fundamentals
+      peRatio: fundamentals.pe_ratio || "N/A", // P/E Ratio from fundamentals
+      trend: quote.askprice > quote.bidprice ? "Upward" : "Downward",
+      reason: getPerformanceReason(quote, fundamentals),
     };
   } catch (error) {
     console.error(`Failed to fetch details for ${symbol}:`, error);
@@ -55,11 +54,11 @@ async function fetchStockDetails(symbol) {
 }
 
 // Determine why the stock is performing well
-function getPerformanceReason(quote, profile) {
+function getPerformanceReason(quote, fundamentals) {
   const reasons = [];
-  if (quote.changesPercentage > 0) reasons.push("Positive price momentum");
-  if (profile.pe !== "N/A" && profile.pe < 20) reasons.push("Attractive P/E ratio");
-  if (quote.changesPercentage > 5) reasons.push("Strong recent gains");
+  if (quote.askprice > quote.bidprice) reasons.push("Positive price momentum");
+  if (fundamentals.pe_ratio !== "N/A" && fundamentals.pe_ratio < 20) reasons.push("Attractive P/E ratio");
+  if (quote.askprice - quote.bidprice > 5) reasons.push("Strong recent gains");
   return reasons.length > 0 ? reasons.join(", ") : "No specific reason identified";
 }
 
