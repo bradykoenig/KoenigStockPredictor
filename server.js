@@ -8,7 +8,7 @@ app.use(bodyParser.json());
 app.use(cors());
 
 // MongoDB Connection
-const dbURI = "mongodb+srv://bkoenig122:Tbirds123%21@stockpredictor.26ofh.mongodb.net/?retryWrites=true&w=majority&appName=StockPredictor";
+const dbURI = "mongodb+srv://bkoenig122:tcjf8ENl8JqCjEu8@stockpredictor.26ofh.mongodb.net/?retryWrites=true&w=majority&appName=StockPredictor";
 mongoose.connect(dbURI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log("Connected to MongoDB"))
   .catch((error) => console.error("Error connecting to MongoDB:", error));
