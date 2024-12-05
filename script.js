@@ -60,12 +60,23 @@ async function fetchStockDetails(symbol) {
     const price = quoteData.c;
     const peRatio = eps ? (price / eps).toFixed(2) : "N/A"; // Calculate P/E ratio
 
+    // Determine why the stock is performing well
+    let performanceReason = "No clear reason";
+    if (quoteData.c > quoteData.pc && quoteData.c > price * 1.05) {
+      performanceReason = "Positive price momentum";
+    } else if (peRatio !== "N/A" && peRatio < 20) {
+      performanceReason = "Undervalued based on P/E ratio";
+    } else if (quoteData.c > quoteData.pc && eps > 0) {
+      performanceReason = "Strong earnings per share";
+    }
+
     return {
       symbol,
       price,
       change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
       peRatio,
       trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
+      reason: performanceReason,
     };
   } catch (error) {
     console.error(`Error fetching stock details for ${symbol}:`, error);
@@ -168,11 +179,7 @@ async function updateStockTable() {
           <td>${stockDetails.change.toFixed(2)}%</td>
           <td>${stockDetails.peRatio}</td>
           <td>${stockDetails.trend}</td>
-          <td>${
-            stockDetails.trend === "Upward"
-              ? "Positive momentum"
-              : "No clear reason"
-          }</td>
+          <td>${stockDetails.reason}</td>
         `;
         tbody.appendChild(row);
 
