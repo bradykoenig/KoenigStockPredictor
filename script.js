@@ -30,17 +30,25 @@ async function fetchStockDetails(symbol) {
   const quoteData = await quoteResponse.json();
   const metricData = await metricResponse.json();
 
-  console.log(`Quote Data for ${symbol}:`, quoteData);
+  // Log the full metric data for debugging
   console.log(`Metric Data for ${symbol}:`, metricData);
 
   if (!quoteData || !metricData) throw new Error(`Failed to fetch details for ${symbol}.`);
 
-  // Check multiple EPS fields for fallback
+  // Attempt to fetch EPS from multiple sources
   const eps =
     metricData.metric?.epsBasicTTM ||
     metricData.metric?.epsDilutedTTM ||
     metricData.metric?.epsReported ||
     null;
+
+  // Log EPS data
+  console.log(`EPS for ${symbol}:`, {
+    epsBasicTTM: metricData.metric?.epsBasicTTM,
+    epsDilutedTTM: metricData.metric?.epsDilutedTTM,
+    epsReported: metricData.metric?.epsReported,
+    selectedEPS: eps,
+  });
 
   // Calculate P/E ratio
   const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A";
@@ -51,13 +59,12 @@ async function fetchStockDetails(symbol) {
     symbol,
     price: quoteData.c,
     change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-    eps: eps ? eps.toFixed(2) : "N/A", // Format EPS value
+    eps: eps ? eps.toFixed(2) : "N/A",
     peRatio: peRatio,
     trend: trend,
     reason: getPerformanceReason(quoteData, peRatio, trend),
   };
 }
-
 // Determine why the stock is performing well
 function getPerformanceReason(quoteData, peRatio, trend) {
   const reasons = [];
