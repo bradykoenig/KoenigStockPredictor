@@ -164,5 +164,5 @@ async function updateStockTable() {
 }
 
 // Refresh the table every 3 minutes
-setInterval(updateStockTable, 180000); // 3 minutes
+setInterval(updateStockTable, 600000); // 10 minutes
 updateStockTable();
