@@ -1,10 +1,25 @@
-const FINNHUB_API_KEY = "YOUR_FINNHUB_API_KEY"; // Replace with your Finnhub API key
+const FINNHUB_API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
+const API_URL_STOCKS = `https://finnhub.io/api/v1/stock/symbol`;
 const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
-const API_URL_PROFILE = `https://finnhub.io/api/v1/stock/profile2`;
 const API_URL_FINANCIALS = `https://finnhub.io/api/v1/stock/metric`;
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 const DAILY_STORAGE_KEY = "topDailyStocks";
+
+// Fetch stock symbols from Finnhub
+async function fetchStockSymbols() {
+  try {
+    const response = await fetch(
+      `${API_URL_STOCKS}?exchange=US&token=${FINNHUB_API_KEY}`
+    );
+    const data = await response.json();
+    console.log("Fetched Stock Symbols:", data);
+    return data.map((stock) => stock.symbol).slice(0, 50); // Limit to top 50 symbols
+  } catch (error) {
+    console.error("Error fetching stock symbols:", error);
+    return [];
+  }
+}
 
 // Fetch EPS from Finnhub's financials API
 async function fetchEPS(symbol) {
@@ -16,11 +31,7 @@ async function fetchEPS(symbol) {
 
     console.log(`Financial Data for ${symbol}:`, data);
 
-    if (
-      !data ||
-      !data.metric ||
-      !data.metric["epsBasicTTM"]
-    ) {
+    if (!data || !data.metric || !data.metric["epsBasicTTM"]) {
       console.warn(`EPS not found for ${symbol}`);
       return null;
     }
@@ -35,18 +46,16 @@ async function fetchEPS(symbol) {
 // Fetch detailed stock data and calculate P/E ratio
 async function fetchStockDetails(symbol) {
   try {
-    const [quoteResponse, profileResponse, eps] = await Promise.all([
+    const [quoteResponse, eps] = await Promise.all([
       fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${FINNHUB_API_KEY}`),
-      fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${FINNHUB_API_KEY}`),
       fetchEPS(symbol),
     ]);
 
     const quoteData = await quoteResponse.json();
-    const profileData = await profileResponse.json();
 
-    console.log(`Finnhub Data for ${symbol}:`, { quoteData, profileData, eps });
+    console.log(`Stock Data for ${symbol}:`, { quoteData, eps });
 
-    if (!quoteData || !profileData) throw new Error(`Missing data for ${symbol}`);
+    if (!quoteData) throw new Error(`Missing data for ${symbol}`);
 
     const price = quoteData.c;
     const peRatio = eps ? (price / eps).toFixed(2) : "N/A"; // Calculate P/E ratio
@@ -55,7 +64,7 @@ async function fetchStockDetails(symbol) {
       symbol,
       price,
       change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-      peRatio, // Dynamically calculated P/E ratio
+      peRatio,
       trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
     };
   } catch (error) {
@@ -66,7 +75,13 @@ async function fetchStockDetails(symbol) {
 
 // Add stocks to leaderboards only if they pass strict criteria
 function addToLeaderboards(stock, dailyStocks, weeklyStocks) {
-  if (stock && stock.peRatio !== "N/A") {
+  if (
+    stock &&
+    stock.peRatio !== "N/A" &&
+    stock.peRatio > 0 &&
+    stock.peRatio < 25 && // Ensure valid P/E ratio
+    stock.change > 2 // Ensure at least 2% daily change
+  ) {
     dailyStocks.push(stock);
 
     if (!weeklyStocks.find((s) => s.symbol === stock.symbol)) {
@@ -136,11 +151,11 @@ async function updateStockTable() {
   tbody.innerHTML = ""; // Clear previous data
 
   try {
-    const topStocks = ["AAPL", "MSFT", "GOOGL"]; // Replace with your top stock symbols
+    const stockSymbols = await fetchStockSymbols(); // Fetch dynamic stock symbols
     const dailyStocks = loadStocks(DAILY_STORAGE_KEY) || [];
     const weeklyStocks = loadStocks(WEEKLY_STORAGE_KEY) || [];
 
-    for (const symbol of topStocks) {
+    for (const symbol of stockSymbols) {
       try {
         const stockDetails = await fetchStockDetails(symbol);
 
