@@ -8,11 +8,14 @@ const DAILY_STORAGE_KEY = "topDailyStocks";
 
 // Fetch all US stocks and filter the top-performing ones
 async function fetchTopStocks() {
-  const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
-  const data = await response.json();
-  if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
-  return data.slice(0, 50).map((stock) => stock.symbol); // Limit to 50 stocks
-}
+    const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
+    const data = await response.json();
+    if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
+    
+    // Limit to 20 stocks per refresh
+    return data.slice(0, 20).map((stock) => stock.symbol);
+  }
+  
 
 // Fetch detailed stock data
 async function fetchStockDetails(symbol) {
