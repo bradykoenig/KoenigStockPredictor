@@ -1,68 +1,69 @@
-const API_KEY_POLYGON = "f8Nd_Rd1hFTyB1BlWRJPmEnPj_or8R4f"; // Replace with your Polygon.io API key
-const API_URL_TICKERS = `https://api.polygon.io/v3/reference/tickers`; // For stock symbols
-const API_URL_QUOTE = `https://api.polygon.io/v2/last/nbbo`; // For real-time quotes
-const API_URL_FUNDAMENTALS = `https://api.polygon.io/vX/reference/financials`; // For EPS and P/E Ratio
+const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
+const API_URL_TOP_STOCKS = `https://finnhub.io/api/v1/stock/symbol`;
+const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
+const API_URL_METRICS = `https://finnhub.io/api/v1/stock/metric`;
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 
 // Fetch top-performing stocks (limit to 20)
 async function fetchTopStocks() {
   try {
-    console.log("Fetching top stocks...");
-    const response = await fetch(`${API_URL_TICKERS}?market=stocks&active=true&sort=ticker&limit=20&apiKey=${API_KEY_POLYGON}`);
+    const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
     const data = await response.json();
-    console.log("Top stocks response:", data);
+    if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
 
-    if (!data || !data.results || !Array.isArray(data.results)) throw new Error("Failed to fetch stock symbols.");
-    return data.results.map((stock) => stock.ticker);
+    // Limit to 20 stocks per refresh
+    return data.slice(0, 20).map((stock) => stock.symbol);
   } catch (error) {
     console.error("Error fetching top stocks:", error);
     return [];
   }
 }
 
-// Fetch detailed stock data, including EPS and P/E ratio
+// Fetch detailed stock data, including manually calculated P/E ratio and EPS
 async function fetchStockDetails(symbol) {
-  try {
-    console.log(`Fetching details for ${symbol}...`);
-    const quoteResponse = await fetch(`${API_URL_QUOTE}/${symbol}?apiKey=${API_KEY_POLYGON}`);
-    const fundamentalsResponse = await fetch(`${API_URL_FUNDAMENTALS}/${symbol}?apiKey=${API_KEY_POLYGON}`);
+  const [quoteResponse, metricResponse] = await Promise.all([
+    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
+    fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
+  ]);
 
-    const quoteData = await quoteResponse.json();
-    const fundamentalsData = await fundamentalsResponse.json();
+  const quoteData = await quoteResponse.json();
+  const metricData = await metricResponse.json();
 
-    console.log("Quote response:", quoteData);
-    console.log("Fundamentals response:", fundamentalsData);
+  console.log(`Quote Data for ${symbol}:`, quoteData);
+  console.log(`Metric Data for ${symbol}:`, metricData);
 
-    if (!quoteData.last || !fundamentalsData.results[0]) {
-      console.error(`Data missing for ${symbol}`);
-      return null;
-    }
+  if (!quoteData || !metricData) throw new Error(`Failed to fetch details for ${symbol}.`);
 
-    const quote = quoteData.last;
-    const fundamentals = fundamentalsData.results[0];
+  // Check multiple EPS fields for fallback
+  const eps =
+    metricData.metric?.epsBasicTTM ||
+    metricData.metric?.epsDilutedTTM ||
+    metricData.metric?.epsReported ||
+    null;
 
-    return {
-      symbol: symbol,
-      price: quote.bidprice || 0,
-      change: quote.askprice - quote.bidprice || 0,
-      eps: fundamentals.eps || "N/A", // EPS from fundamentals
-      peRatio: fundamentals.pe_ratio || "N/A", // P/E Ratio from fundamentals
-      trend: quote.askprice > quote.bidprice ? "Upward" : "Downward",
-      reason: getPerformanceReason(quote, fundamentals),
-    };
-  } catch (error) {
-    console.error(`Failed to fetch details for ${symbol}:`, error);
-    return null;
-  }
+  // Calculate P/E ratio
+  const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A";
+
+  const trend = quoteData.c > quoteData.pc ? "Upward" : "Downward";
+
+  return {
+    symbol,
+    price: quoteData.c,
+    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+    eps: eps ? eps.toFixed(2) : "N/A", // Format EPS value
+    peRatio: peRatio,
+    trend: trend,
+    reason: getPerformanceReason(quoteData, peRatio, trend),
+  };
 }
 
 // Determine why the stock is performing well
-function getPerformanceReason(quote, fundamentals) {
+function getPerformanceReason(quoteData, peRatio, trend) {
   const reasons = [];
-  if (quote.askprice > quote.bidprice) reasons.push("Positive price momentum");
-  if (fundamentals.pe_ratio !== "N/A" && fundamentals.pe_ratio < 20) reasons.push("Attractive P/E ratio");
-  if (quote.askprice - quote.bidprice > 5) reasons.push("Strong recent gains");
+  if (trend === "Upward") reasons.push("Positive price momentum");
+  if (peRatio !== "N/A" && peRatio < 20) reasons.push("Attractive P/E ratio");
+  if (quoteData.c > quoteData.pc * 1.05) reasons.push("Strong recent gains");
   return reasons.length > 0 ? reasons.join(", ") : "No specific reason identified";
 }
 
