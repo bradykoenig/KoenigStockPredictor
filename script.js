@@ -1,7 +1,6 @@
-const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
+const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g"; // Replace with your actual Finnhub API key
 const API_URL_TOP_STOCKS = `https://finnhub.io/api/v1/stock/symbol`;
 const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
-const API_URL_PROFILE = `https://finnhub.io/api/v1/stock/profile2`;
 const API_URL_METRICS = `https://finnhub.io/api/v1/stock/metric`;
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
@@ -16,27 +15,22 @@ async function fetchTopStocks() {
   return data.slice(0, 20).map((stock) => stock.symbol);
 }
 
-// Fetch detailed stock data, including P/E ratio
+// Fetch detailed stock data, including manually calculated P/E ratio
 async function fetchStockDetails(symbol) {
-  const [quoteResponse, profileResponse, metricResponse] = await Promise.all([
+  const [quoteResponse, metricResponse] = await Promise.all([
     fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
-    fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${API_KEY}`),
     fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
   ]);
 
   const quoteData = await quoteResponse.json();
-  const profileData = await profileResponse.json();
   const metricData = await metricResponse.json();
 
-  if (!quoteData || !profileData || !metricData)
+  if (!quoteData || !metricData)
     throw new Error(`Failed to fetch details for ${symbol}.`);
 
-  // Use P/E ratio directly from `profile2`, or calculate it using `metric`
-  const peRatio =
-    profileData.pe ||
-    (metricData.metric && metricData.metric.epsBasicTTM
-      ? (quoteData.c / metricData.metric.epsBasicTTM).toFixed(2)
-      : "N/A");
+  // Manually calculate P/E ratio using EPS (Trailing Twelve Months)
+  const eps = metricData.metric ? metricData.metric.epsBasicTTM : null; // EPS from metrics
+  const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A"; // Calculate P/E ratio
 
   return {
     symbol,
@@ -44,15 +38,15 @@ async function fetchStockDetails(symbol) {
     change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
     peRatio: peRatio,
     trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
-    reason: getPerformanceReason(quoteData, profileData),
+    reason: getPerformanceReason(quoteData, peRatio),
   };
 }
 
 // Determine why the stock is performing well
-function getPerformanceReason(quoteData, profileData) {
+function getPerformanceReason(quoteData, peRatio) {
   const reasons = [];
   if (quoteData.c > quoteData.pc) reasons.push("Positive price momentum");
-  if (profileData.pe && profileData.pe < 20) reasons.push("Attractive P/E ratio");
+  if (peRatio !== "N/A" && peRatio < 20) reasons.push("Attractive P/E ratio");
   if (quoteData.c > quoteData.pc * 1.05) reasons.push("Strong recent gains");
   return reasons.length > 0 ? reasons.join(", ") : "No specific reason identified";
 }
@@ -99,7 +93,7 @@ async function updateStockTable() {
           <td>${stockDetails.symbol}</td>
           <td>${stockDetails.price.toFixed(2)}</td>
           <td>${stockDetails.change.toFixed(2)}%</td>
-          <td>${stockDetails.peRatio || "N/A"}</td>
+          <td>${stockDetails.peRatio}</td>
           <td>${stockDetails.trend}</td>
           <td>${stockDetails.reason}</td>
         `;
