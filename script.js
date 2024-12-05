@@ -1,4 +1,4 @@
-const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
+const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g"; // Replace with your Finnhub API key
 const API_URL_TOP_STOCKS = `https://finnhub.io/api/v1/stock/symbol`;
 const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
 const API_URL_PROFILE = `https://finnhub.io/api/v1/stock/profile2`;
@@ -32,7 +32,17 @@ async function fetchStockDetails(symbol) {
     change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
     peRatio: profileData.pe,
     trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
+    reason: getPerformanceReason(quoteData, profileData),
   };
+}
+
+// Determine why the stock is performing well
+function getPerformanceReason(quoteData, profileData) {
+  const reasons = [];
+  if (quoteData.c > quoteData.pc) reasons.push("Positive price momentum");
+  if (profileData.pe && profileData.pe < 20) reasons.push("Attractive P/E ratio");
+  if (quoteData.c > quoteData.pc * 1.05) reasons.push("Strong recent gains");
+  return reasons.length > 0 ? reasons.join(", ") : "No specific reason identified";
 }
 
 // Update stock table dynamically
@@ -54,6 +64,7 @@ async function updateStockTable() {
           <td>${stockDetails.change.toFixed(2)}%</td>
           <td>${stockDetails.peRatio || "N/A"}</td>
           <td>${stockDetails.trend}</td>
+          <td>${stockDetails.reason}</td>
         `;
         tbody.appendChild(row);
       } catch (error) {
@@ -65,6 +76,6 @@ async function updateStockTable() {
   }
 }
 
-// Refresh the table every 10 seconds
-setInterval(updateStockTable, 10000);
+// Refresh the table every 10 minutes
+setInterval(updateStockTable, 600000);
 updateStockTable();
