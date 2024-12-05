@@ -50,21 +50,7 @@ function getPerformanceReason(change, trend) {
   return reasons.join(", ") || "No specific reason identified";
 }
 
-// Find the best stock
-function findBestStock(stocks) {
-  return stocks.reduce((best, current) => (!best || current.change > best.change ? current : best), null);
-}
-
-// Save and load Today Leaderboard
-function saveDailyPicks(stock) {
-  localStorage.setItem("topDailyStock", JSON.stringify(stock));
-}
-
-function loadDailyPicks() {
-  return JSON.parse(localStorage.getItem("topDailyStock")) || null;
-}
-
-// Save and load Weekly Leaderboard
+// Save weekly picks to localStorage
 function saveWeeklyPicks(stocks) {
   const now = new Date();
   const data = {
@@ -74,6 +60,7 @@ function saveWeeklyPicks(stocks) {
   localStorage.setItem(WEEKLY_STORAGE_KEY, JSON.stringify(data));
 }
 
+// Load weekly picks from localStorage
 function loadWeeklyPicks() {
   const data = JSON.parse(localStorage.getItem(WEEKLY_STORAGE_KEY));
   if (!data || new Date() > new Date(data.expiry)) return [];
@@ -97,33 +84,44 @@ function updateWeeklyStocksSection(weeklyStocks) {
   });
 }
 
+// Add stock to weekly picks
+function addStockToWeeklyPicks(stock) {
+  const weeklyStocks = loadWeeklyPicks();
+  const alreadyExists = weeklyStocks.find((item) => item.symbol === stock.symbol);
+
+  if (!alreadyExists) {
+    weeklyStocks.push(stock);
+    saveWeeklyPicks(weeklyStocks);
+    updateWeeklyStocksSection(weeklyStocks);
+  }
+}
+
 // Update Today Leaderboard
-function updateDailyStocksSection(bestStock) {
+function updateDailyStocksSection(filteredStocks) {
   const dailyStocksList = document.getElementById("dailyStocks");
   dailyStocksList.innerHTML = ""; // Clear previous list
 
-  if (!bestStock) bestStock = loadDailyPicks();
-
-  if (!bestStock) {
-    dailyStocksList.innerHTML = "<li>No top stock today</li>";
+  if (!filteredStocks || filteredStocks.length === 0) {
+    dailyStocksList.innerHTML = "<li>No top stocks today</li>";
     return;
   }
 
-  const listItem = document.createElement("li");
-  listItem.innerHTML = `<strong>${bestStock.symbol}</strong>: ${bestStock.reason} (${bestStock.change}%)`;
-  dailyStocksList.appendChild(listItem);
-
-  saveDailyPicks(bestStock);
+  filteredStocks.forEach((stock) => {
+    const listItem = document.createElement("li");
+    listItem.innerHTML = `
+      <strong>${stock.symbol}</strong>: ${stock.reason} (${stock.change}%)
+    `;
+    dailyStocksList.appendChild(listItem);
+  });
 }
 
-// Update stock table and leaderboards
+// Update stock table dynamically
 async function updateStockTable() {
   const tbody = document.querySelector("#stockTable tbody");
   tbody.innerHTML = ""; // Clear previous data
 
   try {
     const topStocks = await fetchTopStocks();
-    const weeklyStocks = loadWeeklyPicks();
     const stockDetailsList = [];
 
     for (const symbol of topStocks) {
@@ -143,18 +141,28 @@ async function updateStockTable() {
       tbody.appendChild(row);
     }
 
-    const bestStock = findBestStock(stockDetailsList);
-    updateDailyStocksSection(bestStock);
-    if (bestStock && !weeklyStocks.find((s) => s.symbol === bestStock.symbol)) {
-      weeklyStocks.push(bestStock);
-      saveWeeklyPicks(weeklyStocks);
-      updateWeeklyStocksSection(weeklyStocks);
+    // Filter stocks that meet the strict criteria
+    const filteredStocks = stockDetailsList.filter(
+      (stock) => stock.trend === "Upward" && stock.change > 5
+    );
+
+    // Update the Today leaderboard with all filtered stocks
+    updateDailyStocksSection(filteredStocks);
+
+    // Find the best stock from the filtered list
+    if (filteredStocks.length > 0) {
+      const bestStock = filteredStocks.reduce((best, current) =>
+        current.change > best.change ? current : best
+      );
+
+      // Add the best stock to the Weekly leaderboard
+      addStockToWeeklyPicks(bestStock);
     }
   } catch (error) {
     console.error("Error updating stock table:", error);
   }
 }
 
-// Refresh every 3 minutes
-setInterval(updateStockTable, 180000);
+// Refresh the table every 3 minutes
+setInterval(updateStockTable, 180000); // 3 minutes
 updateStockTable();
