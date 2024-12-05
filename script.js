@@ -1,6 +1,6 @@
 const API_KEY = "luw7HWPbHQT2w67qBRRdpQv57EiHKedK";
 const API_URL_TOP_STOCKS = `https://financialmodelingprep.com/api/v3/stock-screener`;
-const API_URL_DETAILS = `https://financialmodelingprep.com/api/v3/profile`;
+const API_URL_PROFILE = `https://financialmodelingprep.com/api/v3/profile`;
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 
@@ -11,7 +11,7 @@ async function fetchTopStocks() {
     const data = await response.json();
     if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
 
-    return data.map((stock) => stock.symbol);
+    return data.slice(0, 20).map((stock) => stock.symbol);
   } catch (error) {
     console.error("Error fetching top stocks:", error);
     return [];
@@ -21,7 +21,7 @@ async function fetchTopStocks() {
 // Fetch stock details, including P/E ratio
 async function fetchStockDetails(symbol) {
   try {
-    const response = await fetch(`${API_URL_DETAILS}/${symbol}?apikey=${API_KEY}`);
+    const response = await fetch(`${API_URL_PROFILE}/${symbol}?apikey=${API_KEY}`);
     const data = await response.json();
 
     if (!data || !data[0]) throw new Error(`Failed to fetch details for ${symbol}.`);
@@ -29,8 +29,8 @@ async function fetchStockDetails(symbol) {
     const stock = data[0];
     return {
       symbol: stock.symbol,
-      price: stock.price,
-      change: stock.changesPercentage,
+      price: stock.price || 0,
+      change: stock.changesPercentage || 0,
       peRatio: stock.pe || "N/A",
       trend: stock.changesPercentage > 0 ? "Upward" : "Downward",
       reason: getPerformanceReason(stock),
@@ -121,6 +121,11 @@ async function updateStockTable() {
 function updateWeeklyStocksSection(weeklyStocks) {
   const weeklyStocksList = document.getElementById("weeklyStocks");
   weeklyStocksList.innerHTML = ""; // Clear previous list
+
+  if (!weeklyStocks || weeklyStocks.length === 0) {
+    weeklyStocksList.innerHTML = "<li>No top stocks this week</li>";
+    return;
+  }
 
   weeklyStocks.forEach((stock) => {
     const listItem = document.createElement("li");
