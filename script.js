@@ -1,7 +1,6 @@
 const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
 const API_URL_TOP_STOCKS = `https://finnhub.io/api/v1/stock/symbol`;
 const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
-const API_URL_METRICS = `https://finnhub.io/api/v1/stock/metric`;
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 
@@ -12,7 +11,6 @@ async function fetchTopStocks() {
     const data = await response.json();
     if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
 
-    // Limit to 20 stocks per refresh
     return data.slice(0, 20).map((stock) => stock.symbol);
   } catch (error) {
     console.error("Error fetching top stocks:", error);
@@ -20,50 +18,40 @@ async function fetchTopStocks() {
   }
 }
 
-// Fetch detailed stock data, including manually calculated P/E ratio and EPS
+// Fetch detailed stock data
 async function fetchStockDetails(symbol) {
-  const [quoteResponse, metricResponse] = await Promise.all([
-    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
-    fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
-  ]);
+  try {
+    console.log(`Fetching details for ${symbol}...`);
+    const response = await fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`);
+    const quoteData = await response.json();
+    console.log(`Quote Data for ${symbol}:`, quoteData);
 
-  const quoteData = await quoteResponse.json();
-  const metricData = await metricResponse.json();
+    if (!quoteData || !quoteData.c) {
+      console.error(`Data missing for ${symbol}`);
+      return null;
+    }
 
-  console.log(`Quote Data for ${symbol}:`, quoteData);
-  console.log(`Metric Data for ${symbol}:`, metricData);
+    const trend = quoteData.c > quoteData.pc ? "Upward" : "Downward";
+    const change = ((quoteData.c - quoteData.pc) / quoteData.pc) * 100;
 
-  if (!quoteData || !metricData) throw new Error(`Failed to fetch details for ${symbol}.`);
-
-  // Check multiple EPS fields for fallback
-  const eps =
-    metricData.metric?.epsBasicTTM ||
-    metricData.metric?.epsDilutedTTM ||
-    metricData.metric?.epsReported ||
-    null;
-
-  // Calculate P/E ratio
-  const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A";
-
-  const trend = quoteData.c > quoteData.pc ? "Upward" : "Downward";
-
-  return {
-    symbol,
-    price: quoteData.c,
-    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-    eps: eps ? eps.toFixed(2) : "N/A", // Format EPS value
-    peRatio: peRatio,
-    trend: trend,
-    reason: getPerformanceReason(quoteData, peRatio, trend),
-  };
+    return {
+      symbol,
+      price: quoteData.c,
+      change: change.toFixed(2),
+      trend: trend,
+      reason: getPerformanceReason(change, trend),
+    };
+  } catch (error) {
+    console.error(`Failed to fetch details for ${symbol}:`, error);
+    return null;
+  }
 }
 
 // Determine why the stock is performing well
-function getPerformanceReason(quoteData, peRatio, trend) {
+function getPerformanceReason(change, trend) {
   const reasons = [];
   if (trend === "Upward") reasons.push("Positive price momentum");
-  if (peRatio !== "N/A" && peRatio < 20) reasons.push("Attractive P/E ratio");
-  if (quoteData.c > quoteData.pc * 1.05) reasons.push("Strong recent gains");
+  if (change > 5) reasons.push("Strong recent gains");
   return reasons.length > 0 ? reasons.join(", ") : "No specific reason identified";
 }
 
@@ -72,7 +60,7 @@ function saveWeeklyPicks(stocks) {
   const now = new Date();
   const data = {
     stocks,
-    expiry: new Date(now.setDate(now.getDate() + (7 - now.getDay()))), // Expire at the end of the current week
+    expiry: new Date(now.setDate(now.getDate() + (7 - now.getDay()))),
   };
   localStorage.setItem(WEEKLY_STORAGE_KEY, JSON.stringify(data));
 }
@@ -80,69 +68,88 @@ function saveWeeklyPicks(stocks) {
 // Load weekly picks
 function loadWeeklyPicks() {
   const data = JSON.parse(localStorage.getItem(WEEKLY_STORAGE_KEY));
-  if (!data || new Date() > new Date(data.expiry)) return null; // Expired or no data
+  if (!data || new Date() > new Date(data.expiry)) return null;
   return data.stocks;
 }
 
-// Add a stock to weekly picks if it meets strong criteria
+// Add stock to weekly picks
 function addStockToWeeklyPicks(stock, weeklyStocks) {
-  if (stock.trend === "Upward" && stock.change > 5 && stock.peRatio !== "N/A" && stock.peRatio < 20) {
+  if (stock.trend === "Upward" && stock.change > 5) {
     weeklyStocks.push(stock);
   }
 }
 
-// Update stock table dynamically
+// Add stock to daily picks
+function addStockToDailyPicks(stock, dailyStocks) {
+  if (stock.trend === "Upward" && stock.change > 5) {
+    dailyStocks.push(stock);
+  }
+}
+
+// Update stock table
 async function updateStockTable() {
   const tbody = document.querySelector("#stockTable tbody");
-  tbody.innerHTML = ""; // Clear previous data
+  tbody.innerHTML = "";
 
   try {
     const topStocks = await fetchTopStocks();
+    const dailyStocks = [];
     const weeklyStocks = loadWeeklyPicks() || [];
 
     for (const symbol of topStocks) {
       try {
         const stockDetails = await fetchStockDetails(symbol);
 
-        if (!stockDetails || stockDetails.trend === "Downward") {
-          // Skip downward-trending stocks
-          console.log(`Skipping ${symbol} due to downward trend.`);
-          continue;
-        }
+        if (!stockDetails || stockDetails.trend === "Downward") continue;
 
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${stockDetails.symbol}</td>
-          <td>${stockDetails.price.toFixed(2)}</td>
-          <td>${stockDetails.change.toFixed(2)}%</td>
-          <td>${stockDetails.eps}</td>
-          <td>${stockDetails.peRatio}</td>
+          <td>${stockDetails.price}</td>
+          <td>${stockDetails.change}%</td>
           <td>${stockDetails.trend}</td>
           <td>${stockDetails.reason}</td>
         `;
         tbody.appendChild(row);
 
-        // Add to weekly picks if it's a strong performer
+        addStockToDailyPicks(stockDetails, dailyStocks);
         addStockToWeeklyPicks(stockDetails, weeklyStocks);
       } catch (error) {
         console.error(`Failed to fetch data for ${symbol}:`, error);
       }
     }
 
-    // Save weekly picks to localStorage
     saveWeeklyPicks(weeklyStocks);
-
-    // Update weekly picks section
+    updateDailyStocksSection(dailyStocks);
     updateWeeklyStocksSection(weeklyStocks);
   } catch (error) {
     console.error("Error updating stock table:", error);
   }
 }
 
-// Update the weekly picks section
+// Update daily picks
+function updateDailyStocksSection(dailyStocks) {
+  const dailyStocksList = document.getElementById("dailyStocks");
+  dailyStocksList.innerHTML = "";
+
+  if (!dailyStocks || dailyStocks.length === 0) {
+    dailyStocksList.innerHTML = "<li>No top stocks today</li>";
+    return;
+  }
+
+  dailyStocks.forEach((stock) => {
+    const listItem = document.createElement("li");
+    listItem.innerHTML = `
+      <strong>${stock.symbol}</strong>: ${stock.reason}
+    `;
+    dailyStocksList.appendChild(listItem);
+  });
+}
+
+// Update weekly picks
 function updateWeeklyStocksSection(weeklyStocks) {
   const weeklyStocksList = document.getElementById("weeklyStocks");
-  weeklyStocksList.innerHTML = ""; // Clear previous list
+  weeklyStocksList.innerHTML = "";
 
   if (!weeklyStocks || weeklyStocks.length === 0) {
     weeklyStocksList.innerHTML = "<li>No top stocks this week</li>";
@@ -159,5 +166,5 @@ function updateWeeklyStocksSection(weeklyStocks) {
 }
 
 // Refresh the table every 3 minutes
-setInterval(updateStockTable, 180000); // 3 minutes
+setInterval(updateStockTable, 180000);
 updateStockTable();
