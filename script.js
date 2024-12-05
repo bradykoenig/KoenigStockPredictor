@@ -10,7 +10,9 @@ async function fetchTopStocks() {
   const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
   const data = await response.json();
   if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
-  return data.slice(0, 10).map((stock) => stock.symbol);
+  
+  // Limit to 50 stocks per refresh
+  return data.slice(0, 50).map((stock) => stock.symbol);
 }
 
 // Fetch detailed stock data
@@ -124,6 +126,6 @@ function updateWeeklyStocksSection(weeklyStocks) {
   });
 }
 
-// Refresh the table every 10 minutes
-setInterval(updateStockTable, 600000);
+// Refresh the table every 5 minutes
+setInterval(updateStockTable, 300000);
 updateStockTable();
