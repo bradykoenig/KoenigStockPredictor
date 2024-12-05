@@ -20,7 +20,7 @@ async function fetchTopStocks() {
   }
 }
 
-// Fetch detailed stock data, including manually calculated P/E ratio
+// Fetch detailed stock data, including manually calculated P/E ratio and EPS
 async function fetchStockDetails(symbol) {
   const [quoteResponse, metricResponse] = await Promise.all([
     fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
@@ -51,6 +51,7 @@ async function fetchStockDetails(symbol) {
     symbol,
     price: quoteData.c,
     change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+    eps: eps ? eps.toFixed(2) : "N/A", // Format EPS value
     peRatio: peRatio,
     trend: trend,
     reason: getPerformanceReason(quoteData, peRatio, trend),
@@ -114,6 +115,7 @@ async function updateStockTable() {
           <td>${stockDetails.symbol}</td>
           <td>${stockDetails.price.toFixed(2)}</td>
           <td>${stockDetails.change.toFixed(2)}%</td>
+          <td>${stockDetails.eps}</td>
           <td>${stockDetails.peRatio}</td>
           <td>${stockDetails.trend}</td>
           <td>${stockDetails.reason}</td>
