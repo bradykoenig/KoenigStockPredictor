@@ -55,52 +55,35 @@ function getPerformanceReason(change, trend) {
   return reasons.length > 0 ? reasons.join(", ") : "No specific reason identified";
 }
 
-// Persist weekly picks
-function saveWeeklyPicks(stocks) {
-  const now = new Date();
-  const data = {
-    stocks,
-    expiry: new Date(now.setDate(now.getDate() + (7 - now.getDay()))),
-  };
-  localStorage.setItem(WEEKLY_STORAGE_KEY, JSON.stringify(data));
+// Find the best stock from the list
+function findBestStock(stocks) {
+  return stocks.reduce((best, current) => {
+    if (!best || current.change > best.change) {
+      return current;
+    }
+    return best;
+  }, null);
 }
 
-// Load weekly picks
-function loadWeeklyPicks() {
-  const data = JSON.parse(localStorage.getItem(WEEKLY_STORAGE_KEY));
-  if (!data || new Date() > new Date(data.expiry)) return null;
-  return data.stocks;
-}
-
-// Add stock to weekly picks
-function addStockToWeeklyPicks(stock, weeklyStocks) {
-  if (stock.trend === "Upward" && stock.change > 5) {
-    weeklyStocks.push(stock);
-  }
-}
-
-// Add stock to daily picks
-function addStockToDailyPicks(stock, dailyStocks) {
-  if (stock.trend === "Upward" && stock.change > 5) {
-    dailyStocks.push(stock);
-  }
-}
-
-// Update stock table
+// Update stock table dynamically
 async function updateStockTable() {
   const tbody = document.querySelector("#stockTable tbody");
-  tbody.innerHTML = "";
+  tbody.innerHTML = ""; // Clear previous data
 
   try {
     const topStocks = await fetchTopStocks();
-    const dailyStocks = [];
-    const weeklyStocks = loadWeeklyPicks() || [];
+    const stockDetailsList = [];
 
     for (const symbol of topStocks) {
       try {
         const stockDetails = await fetchStockDetails(symbol);
 
-        if (!stockDetails || stockDetails.trend === "Downward") continue;
+        if (!stockDetails || stockDetails.trend === "Downward") {
+          console.log(`Skipping ${symbol} due to downward trend.`);
+          continue;
+        }
+
+        stockDetailsList.push(stockDetails);
 
         const row = document.createElement("tr");
         row.innerHTML = `
@@ -111,60 +94,40 @@ async function updateStockTable() {
           <td>${stockDetails.reason}</td>
         `;
         tbody.appendChild(row);
-
-        addStockToDailyPicks(stockDetails, dailyStocks);
-        addStockToWeeklyPicks(stockDetails, weeklyStocks);
       } catch (error) {
         console.error(`Failed to fetch data for ${symbol}:`, error);
       }
     }
 
-    saveWeeklyPicks(weeklyStocks);
-    updateDailyStocksSection(dailyStocks);
-    updateWeeklyStocksSection(weeklyStocks);
+    // Find the best stock
+    const bestStock = findBestStock(stockDetailsList);
+
+    // Update the leaderboard with the best stock
+    updateDailyStocksSection(bestStock ? [bestStock] : []);
+
   } catch (error) {
     console.error("Error updating stock table:", error);
   }
 }
 
-// Update daily picks
-function updateDailyStocksSection(dailyStocks) {
+// Update the daily leaderboard section
+function updateDailyStocksSection(bestStock) {
   const dailyStocksList = document.getElementById("dailyStocks");
-  dailyStocksList.innerHTML = "";
+  dailyStocksList.innerHTML = ""; // Clear previous list
 
-  if (!dailyStocks || dailyStocks.length === 0) {
-    dailyStocksList.innerHTML = "<li>No top stocks today</li>";
+  if (!bestStock || bestStock.length === 0) {
+    dailyStocksList.innerHTML = "<li>No top stock today</li>";
     return;
   }
 
-  dailyStocks.forEach((stock) => {
-    const listItem = document.createElement("li");
-    listItem.innerHTML = `
-      <strong>${stock.symbol}</strong>: ${stock.reason}
-    `;
-    dailyStocksList.appendChild(listItem);
-  });
-}
-
-// Update weekly picks
-function updateWeeklyStocksSection(weeklyStocks) {
-  const weeklyStocksList = document.getElementById("weeklyStocks");
-  weeklyStocksList.innerHTML = "";
-
-  if (!weeklyStocks || weeklyStocks.length === 0) {
-    weeklyStocksList.innerHTML = "<li>No top stocks this week</li>";
-    return;
-  }
-
-  weeklyStocks.forEach((stock) => {
-    const listItem = document.createElement("li");
-    listItem.innerHTML = `
-      <strong>${stock.symbol}</strong>: ${stock.reason}
-    `;
-    weeklyStocksList.appendChild(listItem);
-  });
+  const stock = bestStock[0];
+  const listItem = document.createElement("li");
+  listItem.innerHTML = `
+    <strong>${stock.symbol}</strong>: ${stock.reason} (${stock.change}%)
+  `;
+  dailyStocksList.appendChild(listItem);
 }
 
 // Refresh the table every 3 minutes
-setInterval(updateStockTable, 180000);
+setInterval(updateStockTable, 180000); // 3 minutes
 updateStockTable();
