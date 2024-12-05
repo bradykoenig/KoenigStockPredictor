@@ -5,7 +5,7 @@ const API_URL_METRICS = `https://finnhub.io/api/v1/stock/metric`;
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 
-// Fetch top-performing stocks (first 20)
+// Fetch top-performing stocks (limit to 20)
 async function fetchTopStocks() {
   try {
     const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
@@ -22,43 +22,45 @@ async function fetchTopStocks() {
 
 // Fetch detailed stock data, including manually calculated P/E ratio
 async function fetchStockDetails(symbol) {
-    const [quoteResponse, metricResponse] = await Promise.all([
-      fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
-      fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
-    ]);
-  
-    const quoteData = await quoteResponse.json();
-    const metricData = await metricResponse.json();
-  
-    console.log(`Quote Data for ${symbol}:`, quoteData);
-    console.log(`Metric Data for ${symbol}:`, metricData);
-  
-    if (!quoteData || !metricData) throw new Error(`Failed to fetch details for ${symbol}.`);
-  
-    // Check multiple EPS fields for fallback
-    const eps =
-      metricData.metric?.epsBasicTTM ||
-      metricData.metric?.epsDilutedTTM ||
-      metricData.metric?.epsReported ||
-      null;
-  
-    // Calculate P/E ratio
-    const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A";
-  
-    return {
-      symbol,
-      price: quoteData.c,
-      change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-      peRatio: peRatio,
-      trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
-      reason: getPerformanceReason(quoteData, peRatio),
-    };
-  }  
+  const [quoteResponse, metricResponse] = await Promise.all([
+    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
+    fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
+  ]);
+
+  const quoteData = await quoteResponse.json();
+  const metricData = await metricResponse.json();
+
+  console.log(`Quote Data for ${symbol}:`, quoteData);
+  console.log(`Metric Data for ${symbol}:`, metricData);
+
+  if (!quoteData || !metricData) throw new Error(`Failed to fetch details for ${symbol}.`);
+
+  // Check multiple EPS fields for fallback
+  const eps =
+    metricData.metric?.epsBasicTTM ||
+    metricData.metric?.epsDilutedTTM ||
+    metricData.metric?.epsReported ||
+    null;
+
+  // Calculate P/E ratio
+  const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A";
+
+  const trend = quoteData.c > quoteData.pc ? "Upward" : "Downward";
+
+  return {
+    symbol,
+    price: quoteData.c,
+    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+    peRatio: peRatio,
+    trend: trend,
+    reason: getPerformanceReason(quoteData, peRatio, trend),
+  };
+}
 
 // Determine why the stock is performing well
-function getPerformanceReason(quoteData, peRatio) {
+function getPerformanceReason(quoteData, peRatio, trend) {
   const reasons = [];
-  if (quoteData.c > quoteData.pc) reasons.push("Positive price momentum");
+  if (trend === "Upward") reasons.push("Positive price momentum");
   if (peRatio !== "N/A" && peRatio < 20) reasons.push("Attractive P/E ratio");
   if (quoteData.c > quoteData.pc * 1.05) reasons.push("Strong recent gains");
   return reasons.length > 0 ? reasons.join(", ") : "No specific reason identified";
@@ -83,7 +85,7 @@ function loadWeeklyPicks() {
 
 // Add a stock to weekly picks if it meets strong criteria
 function addStockToWeeklyPicks(stock, weeklyStocks) {
-  if (stock.change > 5 && stock.trend === "Upward" && stock.peRatio !== "N/A" && stock.peRatio < 20) {
+  if (stock.trend === "Upward" && stock.change > 5 && stock.peRatio !== "N/A" && stock.peRatio < 20) {
     weeklyStocks.push(stock);
   }
 }
@@ -101,7 +103,11 @@ async function updateStockTable() {
       try {
         const stockDetails = await fetchStockDetails(symbol);
 
-        if (!stockDetails) continue; // Skip invalid stocks
+        if (!stockDetails || stockDetails.trend === "Downward") {
+          // Skip downward-trending stocks
+          console.log(`Skipping ${symbol} due to downward trend.`);
+          continue;
+        }
 
         const row = document.createElement("tr");
         row.innerHTML = `
