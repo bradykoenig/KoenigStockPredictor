@@ -66,16 +66,18 @@ async function fetchStockDetails(symbol) {
       performanceReason = "Positive price momentum";
     } else if (peRatio !== "N/A" && peRatio < 20) {
       performanceReason = "Undervalued based on P/E ratio";
-    } else if (quoteData.c > quoteData.pc && eps > 0) {
-      performanceReason = "Strong earnings per share";
+    } else if (eps && eps > 0) {
+      performanceReason = "Strong earnings per share (EPS)";
     }
 
     return {
       symbol,
-      price,
-      change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+      price: price ? price.toFixed(2) : "N/A",
+      change: price && quoteData.pc
+        ? (((price - quoteData.pc) / quoteData.pc) * 100).toFixed(2)
+        : "N/A",
       peRatio,
-      trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
+      trend: price > quoteData.pc ? "Upward" : "Downward",
       reason: performanceReason,
     };
   } catch (error) {
@@ -131,7 +133,7 @@ function updateDailyStocksSection(dailyStocks) {
   dailyStocks.forEach((stock) => {
     const listItem = document.createElement("li");
     listItem.innerHTML = `
-      <strong>${stock.symbol}</strong>: ${stock.change.toFixed(2)}% (${stock.trend})
+      <strong>${stock.symbol}</strong>: ${stock.change}% (${stock.trend})
     `;
     dailyStocksList.appendChild(listItem);
   });
@@ -150,7 +152,7 @@ function updateWeeklyStocksSection(weeklyStocks) {
   weeklyStocks.forEach((stock) => {
     const listItem = document.createElement("li");
     listItem.innerHTML = `
-      <strong>${stock.symbol}</strong>: ${stock.change.toFixed(2)}% (${stock.trend})
+      <strong>${stock.symbol}</strong>: ${stock.change}% (${stock.trend})
     `;
     weeklyStocksList.appendChild(listItem);
   });
@@ -175,8 +177,8 @@ async function updateStockTable() {
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${stockDetails.symbol}</td>
-          <td>${stockDetails.price.toFixed(2)}</td>
-          <td>${stockDetails.change.toFixed(2)}%</td>
+          <td>${stockDetails.price}</td>
+          <td>${stockDetails.change}%</td>
           <td>${stockDetails.peRatio}</td>
           <td>${stockDetails.trend}</td>
           <td>${stockDetails.reason}</td>
