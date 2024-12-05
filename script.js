@@ -1,14 +1,14 @@
-const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
-const API_URL_TOP_STOCKS = `https://finnhub.io/api/v1/stock/symbol`;
-const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
-const API_URL_METRICS = `https://finnhub.io/api/v1/stock/metric`;
+const API_KEY_FMP = "luw7HWPbHQT2w67qBRRdpQv57EiHKedK"; // Replace with your FMP API key
+const API_URL_PROFILE = `https://financialmodelingprep.com/api/v3/profile`; // For fundamental data
+const API_URL_QUOTE = `https://financialmodelingprep.com/api/v3/quote`; // For real-time stock data
+const API_URL_SYMBOLS = `https://financialmodelingprep.com/api/v3/stock/list`; // For available stocks
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 
 // Fetch top-performing stocks (limit to 20)
 async function fetchTopStocks() {
   try {
-    const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
+    const response = await fetch(`${API_URL_SYMBOLS}?apikey=${API_KEY_FMP}`);
     const data = await response.json();
     if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
 
@@ -20,57 +20,46 @@ async function fetchTopStocks() {
   }
 }
 
-// Fetch detailed stock data, including manually calculated P/E ratio and EPS
+// Fetch detailed stock data, including EPS and P/E ratio
 async function fetchStockDetails(symbol) {
-  const [quoteResponse, metricResponse] = await Promise.all([
-    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
-    fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
-  ]);
+  try {
+    const [quoteResponse, profileResponse] = await Promise.all([
+      fetch(`${API_URL_QUOTE}/${symbol}?apikey=${API_KEY_FMP}`),
+      fetch(`${API_URL_PROFILE}/${symbol}?apikey=${API_KEY_FMP}`),
+    ]);
 
-  const quoteData = await quoteResponse.json();
-  const metricData = await metricResponse.json();
+    const quoteData = await quoteResponse.json();
+    const profileData = await profileResponse.json();
 
-  // Log the full metric data for debugging
-  console.log(`Metric Data for ${symbol}:`, metricData);
+    if (!quoteData[0] || !profileData[0]) {
+      console.error(`Data missing for ${symbol}`);
+      return null;
+    }
 
-  if (!quoteData || !metricData) throw new Error(`Failed to fetch details for ${symbol}.`);
+    const quote = quoteData[0];
+    const profile = profileData[0];
 
-  // Attempt to fetch EPS from multiple sources
-  const eps =
-    metricData.metric?.epsBasicTTM ||
-    metricData.metric?.epsDilutedTTM ||
-    metricData.metric?.epsReported ||
-    null;
-
-  // Log EPS data
-  console.log(`EPS for ${symbol}:`, {
-    epsBasicTTM: metricData.metric?.epsBasicTTM,
-    epsDilutedTTM: metricData.metric?.epsDilutedTTM,
-    epsReported: metricData.metric?.epsReported,
-    selectedEPS: eps,
-  });
-
-  // Calculate P/E ratio
-  const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A";
-
-  const trend = quoteData.c > quoteData.pc ? "Upward" : "Downward";
-
-  return {
-    symbol,
-    price: quoteData.c,
-    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-    eps: eps ? eps.toFixed(2) : "N/A",
-    peRatio: peRatio,
-    trend: trend,
-    reason: getPerformanceReason(quoteData, peRatio, trend),
-  };
+    return {
+      symbol: profile.symbol,
+      price: quote.price,
+      change: quote.changesPercentage,
+      eps: profile.eps || "N/A", // EPS from FMP
+      peRatio: profile.pe || "N/A", // P/E Ratio from FMP
+      trend: quote.changesPercentage > 0 ? "Upward" : "Downward",
+      reason: getPerformanceReason(quote, profile),
+    };
+  } catch (error) {
+    console.error(`Failed to fetch details for ${symbol}:`, error);
+    return null;
+  }
 }
+
 // Determine why the stock is performing well
-function getPerformanceReason(quoteData, peRatio, trend) {
+function getPerformanceReason(quote, profile) {
   const reasons = [];
-  if (trend === "Upward") reasons.push("Positive price momentum");
-  if (peRatio !== "N/A" && peRatio < 20) reasons.push("Attractive P/E ratio");
-  if (quoteData.c > quoteData.pc * 1.05) reasons.push("Strong recent gains");
+  if (quote.changesPercentage > 0) reasons.push("Positive price momentum");
+  if (profile.pe !== "N/A" && profile.pe < 20) reasons.push("Attractive P/E ratio");
+  if (quote.changesPercentage > 5) reasons.push("Strong recent gains");
   return reasons.length > 0 ? reasons.join(", ") : "No specific reason identified";
 }
 
