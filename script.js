@@ -1,74 +1,73 @@
-const FINNHUB_API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g"; // Replace with your Finnhub API key
+const FINNHUB_API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
 const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
 const API_URL_PROFILE = `https://finnhub.io/api/v1/stock/profile2`;
 const YAHOO_FINANCE_API_URL = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=`;
 
-const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
-const DAILY_STORAGE_KEY = "topDailyStocks";
-
 // Fetch P/E ratio from Yahoo Finance
 async function fetchPERatioYahoo(symbol) {
-  try {
-    const response = await fetch(`${YAHOO_FINANCE_API_URL}${symbol}`);
-    const data = await response.json();
+  const response = await fetch(`${YAHOO_FINANCE_API_URL}${symbol}`);
+  const data = await response.json();
 
-    console.log(`Yahoo Finance Data for ${symbol}:`, data);
-
-    if (
-      !data ||
-      !data.quoteResponse ||
-      !data.quoteResponse.result ||
-      data.quoteResponse.result.length === 0
-    ) {
-      console.warn(`P/E ratio not found for ${symbol}`);
-      return null;
-    }
-
-    return data.quoteResponse.result[0].trailingPE || null; // Return trailing P/E ratio if available
-  } catch (error) {
-    console.error(`Error fetching P/E ratio for ${symbol}:`, error);
+  if (
+    !data ||
+    !data.quoteResponse ||
+    !data.quoteResponse.result ||
+    data.quoteResponse.result.length === 0
+  ) {
+    console.warn(`P/E ratio not found for ${symbol}`);
     return null;
   }
+
+  const stockInfo = data.quoteResponse.result[0];
+  return stockInfo.trailingPE || null; // Return trailing P/E ratio if available
 }
 
 // Fetch detailed stock data
 async function fetchStockDetails(symbol) {
-  try {
-    const [quoteResponse, profileResponse] = await Promise.all([
-      fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${FINNHUB_API_KEY}`),
-      fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${FINNHUB_API_KEY}`),
-    ]);
+  const [quoteResponse, profileResponse] = await Promise.all([
+    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${FINNHUB_API_KEY}`),
+    fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${FINNHUB_API_KEY}`),
+  ]);
 
-    const quoteData = await quoteResponse.json();
-    const profileData = await profileResponse.json();
+  const quoteData = await quoteResponse.json();
+  const profileData = await profileResponse.json();
 
-    console.log(`Finnhub Data for ${symbol}:`, { quoteData, profileData });
+  if (!quoteData || !profileData)
+    throw new Error(`Failed to fetch details for ${symbol}.`);
 
-    if (!quoteData || !profileData) throw new Error(`Missing data for ${symbol}`);
-
-    let peRatio = profileData.pe;
-    if (!peRatio) {
-      peRatio = await fetchPERatioYahoo(symbol);
-    }
-
-    return {
-      symbol,
-      price: quoteData.c,
-      change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-      peRatio: peRatio || "N/A", // Use fetched P/E ratio or default to N/A
-      trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
-    };
-  } catch (error) {
-    console.error(`Error fetching stock details for ${symbol}:`, error);
-    return null; // Return null to skip this stock
+  // Fetch P/E ratio using Yahoo Finance if Finnhub doesn't provide it
+  let peRatio = profileData.pe;
+  if (!peRatio) {
+    peRatio = await fetchPERatioYahoo(symbol);
   }
+
+  return {
+    symbol,
+    price: quoteData.c,
+    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+    peRatio: peRatio || "N/A", // Use fetched P/E ratio or default to N/A
+    beta: profileData.beta || "N/A", // Fetch beta for risk assessment
+    dividendYield: profileData.dividendYield || 0, // Ensure dividend yield is non-null
+    trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
+  };
 }
 
 // Add stocks to leaderboards only if they pass strict criteria
 function addToLeaderboards(stock, dailyStocks, weeklyStocks) {
-  if (stock && stock.peRatio !== "N/A") {
-    dailyStocks.push(stock);
-
+  if (
+    passesStricterCriteria(
+      stock,
+      stock.avgVolume,
+      stock.currentVolume,
+      stock.avg5,
+      stock.avg20
+    )
+  ) {
+    // Add to "Top Stocks Today"
+    if (dailyStocks.length < 5) {
+      dailyStocks.push(stock);
+    }
+    // Add to "Top Stocks Weekly" if not already present
     if (!weeklyStocks.find((s) => s.symbol === stock.symbol)) {
       weeklyStocks.push(stock);
     }
@@ -97,11 +96,6 @@ function updateDailyStocksSection(dailyStocks) {
   const dailyStocksList = document.getElementById("dailyStocks");
   dailyStocksList.innerHTML = ""; // Clear previous list
 
-  if (!dailyStocks || dailyStocks.length === 0) {
-    dailyStocksList.innerHTML = "<li>No top stocks today</li>";
-    return;
-  }
-
   dailyStocks.forEach((stock) => {
     const listItem = document.createElement("li");
     listItem.innerHTML = `
@@ -115,11 +109,6 @@ function updateDailyStocksSection(dailyStocks) {
 function updateWeeklyStocksSection(weeklyStocks) {
   const weeklyStocksList = document.getElementById("weeklyStocks");
   weeklyStocksList.innerHTML = ""; // Clear previous list
-
-  if (!weeklyStocks || weeklyStocks.length === 0) {
-    weeklyStocksList.innerHTML = "<li>No top stocks this week</li>";
-    return;
-  }
 
   weeklyStocks.forEach((stock) => {
     const listItem = document.createElement("li");
@@ -136,7 +125,7 @@ async function updateStockTable() {
   tbody.innerHTML = ""; // Clear previous data
 
   try {
-    const topStocks = ["AAPL", "MSFT", "GOOGL"]; // Replace with your top stock symbols
+    const topStocks = await fetchTopStocks();
     const dailyStocks = loadStocks(DAILY_STORAGE_KEY) || [];
     const weeklyStocks = loadStocks(WEEKLY_STORAGE_KEY) || [];
 
@@ -144,14 +133,12 @@ async function updateStockTable() {
       try {
         const stockDetails = await fetchStockDetails(symbol);
 
-        if (!stockDetails) continue; // Skip invalid stocks
-
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${stockDetails.symbol}</td>
           <td>${stockDetails.price.toFixed(2)}</td>
           <td>${stockDetails.change.toFixed(2)}%</td>
-          <td>${stockDetails.peRatio}</td>
+          <td>${stockDetails.peRatio || "N/A"}</td>
           <td>${stockDetails.trend}</td>
           <td>${
             stockDetails.trend === "Upward"
@@ -164,7 +151,7 @@ async function updateStockTable() {
         // Add to leaderboards based on strict criteria
         addToLeaderboards(stockDetails, dailyStocks, weeklyStocks);
       } catch (error) {
-        console.error(`Error processing stock ${symbol}:`, error);
+        console.error(`Failed to fetch data for ${symbol}:`, error);
       }
     }
 
