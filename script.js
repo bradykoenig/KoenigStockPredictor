@@ -1,14 +1,17 @@
-const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
+const API_KEY_FINNHUB = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g"; // Replace with your Finnhub API key
+const API_KEY_FMP = "luw7HWPbHQT2w67qBRRdpQv57EiHKedK"; // Replace with your Financial Modeling Prep API key
 const API_URL_TOP_STOCKS = `https://finnhub.io/api/v1/stock/symbol`;
 const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
-const API_URL_METRICS = `https://finnhub.io/api/v1/stock/metric`;
+const API_URL_PROFILE_FMP = `https://financialmodelingprep.com/api/v3/profile`;
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 
-// Fetch top-performing stocks (first 20)
+let epsCache = {}; // Cache for EPS data to minimize API calls
+
+// Fetch top-performing stocks (limit to 20)
 async function fetchTopStocks() {
   try {
-    const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
+    const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY_FINNHUB}`);
     const data = await response.json();
     if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
 
@@ -20,40 +23,50 @@ async function fetchTopStocks() {
   }
 }
 
-// Fetch detailed stock data, including manually calculated P/E ratio
+// Fetch EPS from Financial Modeling Prep and cache it
+async function fetchEPS(symbol) {
+  if (epsCache[symbol]) {
+    return epsCache[symbol]; // Use cached EPS if available
+  }
+
+  try {
+    const response = await fetch(`${API_URL_PROFILE_FMP}/${symbol}?apikey=${API_KEY_FMP}`);
+    const data = await response.json();
+
+    if (!data || !data[0] || !data[0].eps) {
+      console.warn(`EPS not available for ${symbol}`);
+      return null; // Return null if EPS is unavailable
+    }
+
+    epsCache[symbol] = data[0].eps; // Cache EPS data
+    return epsCache[symbol];
+  } catch (error) {
+    console.error(`Failed to fetch EPS for ${symbol}:`, error);
+    return null;
+  }
+}
+
+// Fetch stock details, including P/E ratio
 async function fetchStockDetails(symbol) {
-    const [quoteResponse, metricResponse] = await Promise.all([
-      fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
-      fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
-    ]);
-  
-    const quoteData = await quoteResponse.json();
-    const metricData = await metricResponse.json();
-  
-    console.log(`Quote Data for ${symbol}:`, quoteData);
-    console.log(`Metric Data for ${symbol}:`, metricData);
-  
-    if (!quoteData || !metricData) throw new Error(`Failed to fetch details for ${symbol}.`);
-  
-    // Check multiple EPS fields for fallback
-    const eps =
-      metricData.metric?.epsBasicTTM ||
-      metricData.metric?.epsDilutedTTM ||
-      metricData.metric?.epsReported ||
-      null;
-  
-    // Calculate P/E ratio
-    const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A";
-  
-    return {
-      symbol,
-      price: quoteData.c,
-      change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-      peRatio: peRatio,
-      trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
-      reason: getPerformanceReason(quoteData, peRatio),
-    };
-  }  
+  const [quoteResponse] = await Promise.all([
+    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY_FINNHUB}`),
+  ]);
+
+  const quoteData = await quoteResponse.json();
+  const eps = await fetchEPS(symbol); // Use cached EPS or fetch if missing
+
+  // Compute P/E Ratio
+  const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A";
+
+  return {
+    symbol,
+    price: quoteData.c,
+    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+    peRatio: peRatio,
+    trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
+    reason: getPerformanceReason(quoteData, peRatio),
+  };
+}
 
 // Determine why the stock is performing well
 function getPerformanceReason(quoteData, peRatio) {
@@ -150,6 +163,6 @@ function updateWeeklyStocksSection(weeklyStocks) {
   });
 }
 
-// Refresh the table every 3 minutes
-setInterval(updateStockTable, 180000); // 3 minutes
+// Refresh the table every 10 minutes
+setInterval(updateStockTable, 600000); // 10 minutes
 updateStockTable();
