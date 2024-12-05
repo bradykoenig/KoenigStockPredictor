@@ -22,29 +22,36 @@ async function fetchTopStocks() {
 
 // Fetch detailed stock data, including manually calculated P/E ratio
 async function fetchStockDetails(symbol) {
-  const [quoteResponse, metricResponse] = await Promise.all([
-    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
-    fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
-  ]);
+  try {
+    const [quoteResponse, metricResponse] = await Promise.all([
+      fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
+      fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
+    ]);
 
-  const quoteData = await quoteResponse.json();
-  const metricData = await metricResponse.json();
+    const quoteData = await quoteResponse.json();
+    const metricData = await metricResponse.json();
 
-  if (!quoteData || !metricData)
-    throw new Error(`Failed to fetch details for ${symbol}.`);
+    console.log(`Quote Data for ${symbol}:`, quoteData);
+    console.log(`Metric Data for ${symbol}:`, metricData);
 
-  // Manually calculate P/E ratio using EPS (Trailing Twelve Months)
-  const eps = metricData.metric ? metricData.metric.epsBasicTTM : null; // EPS from metrics
-  const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A"; // Calculate P/E ratio
+    if (!quoteData || !metricData) throw new Error(`Failed to fetch details for ${symbol}.`);
 
-  return {
-    symbol,
-    price: quoteData.c,
-    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-    peRatio: peRatio,
-    trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
-    reason: getPerformanceReason(quoteData, peRatio),
-  };
+    // Fetch EPS (Trailing Twelve Months) and calculate P/E Ratio
+    const eps = metricData.metric ? metricData.metric.epsBasicTTM : null; // EPS from metrics
+    const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A"; // Calculate P/E ratio
+
+    return {
+      symbol,
+      price: quoteData.c,
+      change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+      peRatio: peRatio,
+      trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
+      reason: getPerformanceReason(quoteData, peRatio),
+    };
+  } catch (error) {
+    console.error(`Failed to fetch data for ${symbol}:`, error);
+    return null; // Skip this stock
+  }
 }
 
 // Determine why the stock is performing well
