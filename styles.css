@@ -24,61 +24,11 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-}
-
-.side-tabs {
-  width: 30%;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.side-tabs h2 {
-  color: #007bff;
-}
-
-.top-stocks-today,
-.top-stocks-weekly {
-  background-color: #f8f9fa;
-  padding: 15px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-}
-
-ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-li {
-  margin-bottom: 10px;
-  padding: 8px;
-  border-bottom: 1px solid #ddd;
-}
-
-li:last-child {
-  border-bottom: none;
-}
-
-li strong {
-  color: #007bff;
-}
-
-.top-stocks-today li {
-  background-color: #e9f7ef; /* Light green for today */
-  border: 1px solid #c3e6cb;
-  border-radius: 5px;
-}
-
-.top-stocks-weekly li {
-  background-color: #f7f9fc; /* Light blue for weekly */
-  border: 1px solid #c8d7e2;
-  border-radius: 5px;
+  gap: 20px; /* Add space between sections */
 }
 
 .stock-table {
-  width: 65%;
+  width: 60%; /* Main stock table in the center */
 }
 
 table {
@@ -106,4 +56,50 @@ tr:nth-child(even) {
 
 tr:hover {
   background-color: #ddd;
+}
+
+.side-tabs {
+  width: 20%; /* Side sections */
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.side-tabs h2 {
+  color: #007bff;
+  text-align: center;
+}
+
+.top-stocks-today {
+  background-color: #e9f7ef; /* Light green for today */
+  padding: 15px;
+  border: 1px solid #c3e6cb;
+  border-radius: 8px;
+}
+
+.top-stocks-weekly {
+  background-color: #f7f9fc; /* Light blue for weekly */
+  padding: 15px;
+  border: 1px solid #c8d7e2;
+  border-radius: 8px;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+li {
+  margin-bottom: 10px;
+  padding: 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+li:last-child {
+  border-bottom: none;
+}
+
+li strong {
+  color: #007bff;
 }
