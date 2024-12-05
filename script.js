@@ -1,16 +1,18 @@
-const API_KEY = "luw7HWPbHQT2w67qBRRdpQv57EiHKedK";
-const API_URL_TOP_STOCKS = `https://financialmodelingprep.com/api/v3/stock-screener`;
-const API_URL_PROFILE = `https://financialmodelingprep.com/api/v3/profile`;
+const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
+const API_URL_TOP_STOCKS = `https://finnhub.io/api/v1/stock/symbol`;
+const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
+const API_URL_METRICS = `https://finnhub.io/api/v1/stock/metric`;
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 
 // Fetch top-performing stocks (first 20)
 async function fetchTopStocks() {
   try {
-    const response = await fetch(`${API_URL_TOP_STOCKS}?marketCapMoreThan=1000000000&limit=20&apikey=${API_KEY}`);
+    const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
     const data = await response.json();
     if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
 
+    // Limit to 20 stocks per refresh
     return data.slice(0, 20).map((stock) => stock.symbol);
   } catch (error) {
     console.error("Error fetching top stocks:", error);
@@ -18,35 +20,39 @@ async function fetchTopStocks() {
   }
 }
 
-// Fetch stock details, including P/E ratio
+// Fetch detailed stock data, including manually calculated P/E ratio
 async function fetchStockDetails(symbol) {
-  try {
-    const response = await fetch(`${API_URL_PROFILE}/${symbol}?apikey=${API_KEY}`);
-    const data = await response.json();
+  const [quoteResponse, metricResponse] = await Promise.all([
+    fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
+    fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
+  ]);
 
-    if (!data || !data[0]) throw new Error(`Failed to fetch details for ${symbol}.`);
+  const quoteData = await quoteResponse.json();
+  const metricData = await metricResponse.json();
 
-    const stock = data[0];
-    return {
-      symbol: stock.symbol,
-      price: stock.price || 0,
-      change: stock.changesPercentage || 0,
-      peRatio: stock.pe || "N/A",
-      trend: stock.changesPercentage > 0 ? "Upward" : "Downward",
-      reason: getPerformanceReason(stock),
-    };
-  } catch (error) {
-    console.error(`Failed to fetch data for ${symbol}:`, error);
-    return null; // Skip this stock
-  }
+  if (!quoteData || !metricData)
+    throw new Error(`Failed to fetch details for ${symbol}.`);
+
+  // Manually calculate P/E ratio using EPS (Trailing Twelve Months)
+  const eps = metricData.metric ? metricData.metric.epsBasicTTM : null; // EPS from metrics
+  const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A"; // Calculate P/E ratio
+
+  return {
+    symbol,
+    price: quoteData.c,
+    change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
+    peRatio: peRatio,
+    trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
+    reason: getPerformanceReason(quoteData, peRatio),
+  };
 }
 
 // Determine why the stock is performing well
-function getPerformanceReason(stock) {
+function getPerformanceReason(quoteData, peRatio) {
   const reasons = [];
-  if (stock.changesPercentage > 0) reasons.push("Positive price momentum");
-  if (stock.pe && stock.pe < 20) reasons.push("Attractive P/E ratio");
-  if (stock.changesPercentage > 5) reasons.push("Strong recent gains");
+  if (quoteData.c > quoteData.pc) reasons.push("Positive price momentum");
+  if (peRatio !== "N/A" && peRatio < 20) reasons.push("Attractive P/E ratio");
+  if (quoteData.c > quoteData.pc * 1.05) reasons.push("Strong recent gains");
   return reasons.length > 0 ? reasons.join(", ") : "No specific reason identified";
 }
 
