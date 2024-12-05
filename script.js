@@ -6,24 +6,16 @@ const API_URL_PROFILE = `https://finnhub.io/api/v1/stock/profile2`;
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 const DAILY_STORAGE_KEY = "topDailyStocks";
 
-// Enhanced criteria for "Top Stocks Today"
-function passesStrictCriteria(stock, avgVolume, currentVolume) {
-  return (
-    stock.change > 15 && // Daily change > 15%
-    stock.trend === "Upward" && // Positive trend
-    stock.peRatio !== null &&
-    stock.peRatio < 25 && // P/E Ratio < 25
-    currentVolume > avgVolume * 1.5 // Volume surge > 50%
-  );
-}
-
 // Fetch all US stocks and filter the top-performing ones
 async function fetchTopStocks() {
-  const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
-  const data = await response.json();
-  if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
-  return data.slice(0, 20).map((stock) => stock.symbol); // Limit to 20 stocks per refresh
-}
+    const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
+    const data = await response.json();
+    if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
+    
+    // Limit to 20 stocks per refresh
+    return data.slice(0, 20).map((stock) => stock.symbol);
+  }
+  
 
 // Fetch detailed stock data
 async function fetchStockDetails(symbol) {
@@ -38,34 +30,26 @@ async function fetchStockDetails(symbol) {
   if (!quoteData || !profileData)
     throw new Error(`Failed to fetch details for ${symbol}.`);
 
-  // Volume and averages (you may implement more granular metrics if API allows)
-  const avgVolume = Math.random() * 10000 + 20000; // Placeholder for actual average volume
-  const currentVolume = Math.random() * 50000; // Placeholder for actual current volume
-
   return {
     symbol,
     price: quoteData.c,
     change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
     peRatio: profileData.pe,
     trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
-    avgVolume,
-    currentVolume,
+    reason: getPerformanceReason(quoteData, profileData),
   };
 }
 
-// Add stocks to leaderboards only if they pass strict criteria
-function addToLeaderboards(stock, dailyStocks, weeklyStocks) {
-  if (
-    passesStrictCriteria(stock, stock.avgVolume, stock.currentVolume)
-  ) {
-    dailyStocks.push(stock);
-    if (!weeklyStocks.find((s) => s.symbol === stock.symbol)) {
-      weeklyStocks.push(stock);
-    }
-  }
+// Determine why the stock is performing well
+function getPerformanceReason(quoteData, profileData) {
+  const reasons = [];
+  if (quoteData.c > quoteData.pc) reasons.push("Positive price momentum");
+  if (profileData.pe && profileData.pe < 20) reasons.push("Attractive P/E ratio");
+  if (quoteData.c > quoteData.pc * 1.10) reasons.push("Strong recent gains (10%+)");
+  return reasons.length > 0 ? reasons.join(", ") : "No specific reason identified";
 }
 
-// Save stocks to localStorage
+// Persist stocks
 function saveStocks(key, stocks) {
   const now = new Date();
   const data = {
@@ -75,42 +59,24 @@ function saveStocks(key, stocks) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
-// Load stocks from localStorage
+// Load stocks from storage
 function loadStocks(key) {
   const data = JSON.parse(localStorage.getItem(key));
   if (!data || new Date() > new Date(data.expiry)) return null; // Expired or no data
   return data.stocks;
 }
 
-// Update the "Top Stocks Today" section
-function updateDailyStocksSection(dailyStocks) {
-  const dailyStocksList = document.getElementById("dailyStocks");
-  dailyStocksList.innerHTML = ""; // Clear previous list
-
-  dailyStocks.forEach((stock) => {
-    const listItem = document.createElement("li");
-    listItem.innerHTML = `
-      <strong>${stock.symbol}</strong>: ${stock.change.toFixed(2)}% (${stock.trend})
-    `;
-    dailyStocksList.appendChild(listItem);
-  });
+// Add a stock to the daily and weekly lists if it meets stringent criteria
+function addToDailyAndWeekly(stock, dailyStocks, weeklyStocks) {
+  if (stock.change > 10 && stock.trend === "Upward") {
+    dailyStocks.push(stock);
+    if (!weeklyStocks.find((s) => s.symbol === stock.symbol)) {
+      weeklyStocks.push(stock);
+    }
+  }
 }
 
-// Update the "Top Stocks Weekly" section
-function updateWeeklyStocksSection(weeklyStocks) {
-  const weeklyStocksList = document.getElementById("weeklyStocks");
-  weeklyStocksList.innerHTML = ""; // Clear previous list
-
-  weeklyStocks.forEach((stock) => {
-    const listItem = document.createElement("li");
-    listItem.innerHTML = `
-      <strong>${stock.symbol}</strong>: ${stock.change.toFixed(2)}% (${stock.trend})
-    `;
-    weeklyStocksList.appendChild(listItem);
-  });
-}
-
-// Update the stock table and leaderboards dynamically
+// Update stock table dynamically
 async function updateStockTable() {
   const tbody = document.querySelector("#stockTable tbody");
   tbody.innerHTML = ""; // Clear previous data
@@ -131,14 +97,12 @@ async function updateStockTable() {
           <td>${stockDetails.change.toFixed(2)}%</td>
           <td>${stockDetails.peRatio || "N/A"}</td>
           <td>${stockDetails.trend}</td>
-          <td>${
-            stockDetails.trend === "Upward" ? "Positive momentum" : "No clear reason"
-          }</td>
+          <td>${stockDetails.reason}</td>
         `;
         tbody.appendChild(row);
 
-        // Add to leaderboards based on strict criteria
-        addToLeaderboards(stockDetails, dailyStocks, weeklyStocks);
+        // Add to daily and weekly stocks if it's a strong performer
+        addToDailyAndWeekly(stockDetails, dailyStocks, weeklyStocks);
       } catch (error) {
         console.error(`Failed to fetch data for ${symbol}:`, error);
       }
@@ -154,6 +118,34 @@ async function updateStockTable() {
   }
 }
 
-// Refresh every 5 minutes
-setInterval(updateStockTable, 300000); // 5 minutes
+// Update the "Top Stocks Today" section
+function updateDailyStocksSection(dailyStocks) {
+  const dailyStocksList = document.getElementById("dailyStocks");
+  dailyStocksList.innerHTML = ""; // Clear previous list
+
+  dailyStocks.forEach((stock) => {
+    const listItem = document.createElement("li");
+    listItem.innerHTML = `
+      <strong>${stock.symbol}</strong>: ${stock.reason}
+    `;
+    dailyStocksList.appendChild(listItem);
+  });
+}
+
+// Update the "Top Stocks Weekly" section
+function updateWeeklyStocksSection(weeklyStocks) {
+  const weeklyStocksList = document.getElementById("weeklyStocks");
+  weeklyStocksList.innerHTML = ""; // Clear previous list
+
+  weeklyStocks.forEach((stock) => {
+    const listItem = document.createElement("li");
+    listItem.innerHTML = `
+      <strong>${stock.symbol}</strong>: ${stock.reason}
+    `;
+    weeklyStocksList.appendChild(listItem);
+  });
+}
+
+// Refresh the table every 5 minutes
+setInterval(updateStockTable, 300000);
 updateStockTable();
