@@ -1,4 +1,4 @@
-const FINNHUB_API_KEY = "YOUR_FINNHUB_API_KEY"; // Replace with your Finnhub API key
+const FINNHUB_API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
 const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
 const API_URL_PROFILE = `https://finnhub.io/api/v1/stock/profile2`;
 const YAHOO_FINANCE_API_URL = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=`;
