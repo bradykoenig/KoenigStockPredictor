@@ -8,11 +8,13 @@ const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 // Fetch top-performing stocks (limit to 20)
 async function fetchTopStocks() {
   try {
+    console.log("Fetching top stocks...");
     const response = await fetch(`${API_URL_TICKERS}?market=stocks&active=true&sort=ticker&limit=20&apiKey=${API_KEY_POLYGON}`);
     const data = await response.json();
-    if (!data || !data.results || !Array.isArray(data.results)) throw new Error("Failed to fetch stock symbols.");
+    console.log("Top stocks response:", data);
 
-    return data.results.map((stock) => stock.ticker); // Return first 20 tickers
+    if (!data || !data.results || !Array.isArray(data.results)) throw new Error("Failed to fetch stock symbols.");
+    return data.results.map((stock) => stock.ticker);
   } catch (error) {
     console.error("Error fetching top stocks:", error);
     return [];
@@ -22,15 +24,17 @@ async function fetchTopStocks() {
 // Fetch detailed stock data, including EPS and P/E ratio
 async function fetchStockDetails(symbol) {
   try {
-    const [quoteResponse, fundamentalsResponse] = await Promise.all([
-      fetch(`${API_URL_QUOTE}/${symbol}?apiKey=${API_KEY_POLYGON}`),
-      fetch(`${API_URL_FUNDAMENTALS}/${symbol}?apiKey=${API_KEY_POLYGON}`),
-    ]);
+    console.log(`Fetching details for ${symbol}...`);
+    const quoteResponse = await fetch(`${API_URL_QUOTE}/${symbol}?apiKey=${API_KEY_POLYGON}`);
+    const fundamentalsResponse = await fetch(`${API_URL_FUNDAMENTALS}/${symbol}?apiKey=${API_KEY_POLYGON}`);
 
     const quoteData = await quoteResponse.json();
     const fundamentalsData = await fundamentalsResponse.json();
 
-    if (!quoteData || !quoteData.last || !fundamentalsData || !fundamentalsData.results[0]) {
+    console.log("Quote response:", quoteData);
+    console.log("Fundamentals response:", fundamentalsData);
+
+    if (!quoteData.last || !fundamentalsData.results[0]) {
       console.error(`Data missing for ${symbol}`);
       return null;
     }
