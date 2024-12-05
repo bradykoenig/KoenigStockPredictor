@@ -2,6 +2,7 @@ const API_KEY = "ct8h0mpr01qtkv5sb890ct8h0mpr01qtkv5sb89g";
 const API_URL_TOP_STOCKS = `https://finnhub.io/api/v1/stock/symbol`;
 const API_URL_QUOTE = `https://finnhub.io/api/v1/quote`;
 const API_URL_PROFILE = `https://finnhub.io/api/v1/stock/profile2`;
+const API_URL_METRICS = `https://finnhub.io/api/v1/stock/metric`;
 
 const WEEKLY_STORAGE_KEY = "topWeeklyStocks";
 
@@ -10,29 +11,35 @@ async function fetchTopStocks() {
   const response = await fetch(`${API_URL_TOP_STOCKS}?exchange=US&token=${API_KEY}`);
   const data = await response.json();
   if (!data || !Array.isArray(data)) throw new Error("Failed to fetch stock symbols.");
-  
-  // Limit to 50 stocks per refresh
-  return data.slice(0, 50).map((stock) => stock.symbol);
+
+  // Limit to 20 stocks per refresh
+  return data.slice(0, 20).map((stock) => stock.symbol);
 }
 
-// Fetch detailed stock data
+// Fetch detailed stock data, including P/E ratio
 async function fetchStockDetails(symbol) {
-  const [quoteResponse, profileResponse] = await Promise.all([
+  const [quoteResponse, profileResponse, metricResponse] = await Promise.all([
     fetch(`${API_URL_QUOTE}?symbol=${symbol}&token=${API_KEY}`),
     fetch(`${API_URL_PROFILE}?symbol=${symbol}&token=${API_KEY}`),
+    fetch(`${API_URL_METRICS}?symbol=${symbol}&metric=all&token=${API_KEY}`),
   ]);
 
   const quoteData = await quoteResponse.json();
   const profileData = await profileResponse.json();
+  const metricData = await metricResponse.json();
 
-  if (!quoteData || !profileData)
+  if (!quoteData || !profileData || !metricData)
     throw new Error(`Failed to fetch details for ${symbol}.`);
+
+  // Calculate P/E ratio
+  const eps = metricData.metric ? metricData.metric.epsBasicTTM : null; // EPS from metrics
+  const peRatio = eps ? (quoteData.c / eps).toFixed(2) : "N/A"; // Calculate P/E ratio
 
   return {
     symbol,
     price: quoteData.c,
     change: ((quoteData.c - quoteData.pc) / quoteData.pc) * 100,
-    peRatio: profileData.pe,
+    peRatio: peRatio,
     trend: quoteData.c > quoteData.pc ? "Upward" : "Downward",
     reason: getPerformanceReason(quoteData, profileData),
   };
@@ -66,7 +73,7 @@ function loadWeeklyPicks() {
 
 // Add a stock to weekly picks if it meets strong criteria
 function addStockToWeeklyPicks(stock, weeklyStocks) {
-  if (stock.change > 5 && stock.trend === "Upward" && stock.peRatio < 20) {
+  if (stock.change > 5 && stock.trend === "Upward" && stock.peRatio !== "N/A" && stock.peRatio < 20) {
     weeklyStocks.push(stock);
   }
 }
@@ -126,6 +133,6 @@ function updateWeeklyStocksSection(weeklyStocks) {
   });
 }
 
-// Refresh the table every 5 minutes
-setInterval(updateStockTable, 300000);
+// Refresh the table every 3 minutes
+setInterval(updateStockTable, 180000); // 3 minutes
 updateStockTable();
