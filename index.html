@@ -10,21 +10,31 @@
 <body>
   <div class="container">
     <h1>Best Stocks Predictor</h1>
-    <table id="stockTable">
-      <thead>
-        <tr>
-          <th>Stock</th>
-          <th>Price</th>
-          <th>Change (%)</th>
-          <th>PE Ratio</th>
-          <th>Trend</th>
-          <th>Why It's Performing Well</th>
-        </tr>
-      </thead>
-      <tbody>
-        <!-- Rows will be dynamically generated -->
-      </tbody>
-    </table>
+    <div class="main-content">
+      <div class="stock-table">
+        <table id="stockTable">
+          <thead>
+            <tr>
+              <th>Stock</th>
+              <th>Price</th>
+              <th>Change (%)</th>
+              <th>PE Ratio</th>
+              <th>Trend</th>
+              <th>Why It's Performing Well</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Rows will be dynamically generated -->
+          </tbody>
+        </table>
+      </div>
+      <div class="weekly-picks">
+        <h2>Top Stocks Weekly</h2>
+        <ul id="weeklyStocks">
+          <!-- Weekly stocks will be dynamically added here -->
+        </ul>
+      </div>
+    </div>
   </div>
 </body>
 </html>
